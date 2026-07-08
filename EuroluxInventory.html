@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eurolux Inventory &amp; Stock</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="ELX Inventory">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --black: #000000;
+  --dark: #1a1a1a;
+  --gray-900: #333333;
+  --gray-700: #555555;
+  --gray-500: #666666;
+  --gray-300: #999999;
+  --gray-100: #f0f0f0;
+  --light: #f7f7f7;
+  --white: #ffffff;
+  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-sans: 'Montserrat', Arial, sans-serif;
+  --radius: 4px;
+  --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-lg: 0 6px 24px rgba(0,0,0,0.12);
+}
+html, body { height: 100%; font-family: var(--font-sans); color: var(--dark); font-size: 14px; background: var(--light); }
+
+/* ============================================
+   APP SHELL
+   ============================================ */
+#app-main { display: none; min-height: 100vh; flex-direction: column; }
+.app-nav {
+  background: var(--black); color: var(--white); padding: 0 1.5rem; display: flex;
+  align-items: center; gap: 0.6rem; height: 54px; position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4); flex-wrap: wrap;
+}
+.nav-brand { display: flex; align-items: center; gap: 0.8rem; margin-right: auto; text-decoration: none; cursor: pointer; }
+.nav-brand .name { font-family: var(--font-serif); font-size: 1.05rem; letter-spacing: 0.1em; color: var(--white); white-space: nowrap; }
+.nav-brand .vline { width: 1px; height: 18px; background: rgba(255,255,255,0.25); }
+.nav-brand .sub { font-size: 0.6rem; letter-spacing: 0.18em; color: rgba(255,255,255,0.55); text-transform: uppercase; white-space: nowrap; }
+.nav-btn {
+  background: none; border: 1px solid rgba(255,255,255,0.25); color: rgba(255,255,255,0.85);
+  padding: 0.38rem 0.85rem; border-radius: var(--radius); font-family: var(--font-sans);
+  font-size: 0.74rem; letter-spacing: 0.03em; cursor: pointer; transition: all 0.2s; white-space: nowrap;
+}
+.nav-btn:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.5); color: var(--white); }
+.nav-btn.primary { background: var(--white); color: var(--black); border-color: var(--white); font-weight: 600; }
+.nav-btn.primary:hover { background: #e8e8e8; }
+.nav-btn.active { background: rgba(255,255,255,0.16); color: var(--white); }
+
+.app-content { flex: 1; padding: 1.75rem 2rem; max-width: 1320px; margin: 0 auto; width: 100%; }
+.app-footer { text-align: center; padding: 1rem; font-size: 0.72rem; color: var(--gray-500); border-top: 1px solid var(--gray-100); }
+
+/* ============================================
+   DASHBOARD / SHARED PAGE HEADER
+   ============================================ */
+.dashboard-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem; }
+.dashboard-header h1 { font-family: var(--font-serif); font-size: 1.7rem; font-weight: 400; }
+.dashboard-header p { font-size: 0.8rem; color: var(--gray-500); margin-top: 2px; }
+.search-wrap { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+.search-bar, .status-filter, .date-filter {
+  padding: 0.5rem 0.9rem; border: 1px solid #ddd; border-radius: var(--radius);
+  font-family: var(--font-sans); font-size: 0.8rem; background: var(--white); outline: none;
+}
+.search-bar { width: 240px; }
+.search-bar:focus, .status-filter:focus { border-color: var(--black); }
+
+.stats-bar { display: flex; gap: 0.9rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.stat-pill { background: var(--white); border-radius: var(--radius); padding: 0.7rem 1.1rem; display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.72rem; color: var(--gray-700); box-shadow: var(--shadow); min-width: 108px; }
+.stat-pill strong { font-size: 1.25rem; color: var(--black); font-family: var(--font-serif); font-weight: 700; }
+.stat-pill.warn strong { color: #b45309; }
+.stat-pill.danger strong { color: #b91c1c; }
+.stat-pill.good strong { color: #15803d; }
+
+.section-card { background: var(--white); border-radius: 6px; padding: 1.5rem; box-shadow: var(--shadow); margin-bottom: 1.25rem; }
+.section-card h3 { font-size: 0.65rem; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 700; color: var(--gray-500); margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--gray-100); }
+.grid-2 { display: grid; grid-template-columns: 1.3fr 1fr; gap: 1.25rem; }
+.grid-2b { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+@media (max-width: 900px) { .grid-2, .grid-2b { grid-template-columns: 1fr; } }
+
+.bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; font-size: 0.78rem; }
+.bar-row .lbl { width: 150px; flex-shrink: 0; color: var(--gray-700); }
+.bar-row .track { flex: 1; height: 9px; background: var(--gray-100); border-radius: 20px; overflow: hidden; }
+.bar-row .track > div { height: 100%; background: var(--black); border-radius: 20px; }
+.bar-row .val { width: 76px; text-align: right; font-weight: 700; flex-shrink: 0; }
+
+/* ============================================
+   TABLES / LISTS
+   ============================================ */
+.quotes-list-wrap { overflow-x: auto; }
+.quotes-list { width: 100%; border-collapse: collapse; background: var(--white); border-radius: 8px; overflow: hidden; box-shadow: var(--shadow); }
+.quotes-list thead tr { background: #1a1a1a; color: white; }
+.quotes-list thead th { padding: 0.7rem 0.9rem; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; text-align: left; white-space: nowrap; }
+.quotes-list thead th.r { text-align: right; }
+.quotes-list tbody tr { border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.12s; }
+.quotes-list tbody tr:last-child { border-bottom: none; }
+.quotes-list tbody tr:hover { background: #f7f7f5; }
+.quotes-list tbody td { padding: 0.8rem 0.9rem; font-size: 0.82rem; vertical-align: middle; }
+.quotes-list tbody td.r { text-align: right; }
+.quotes-list tbody td.muted { color: var(--gray-500); font-size: 0.76rem; }
+
+.status-badge {
+  display: inline-block; padding: 0.18rem 0.55rem; border-radius: 999px;
+  font-size: 0.6rem; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 600; white-space: nowrap;
+}
+.s-stock-in { background: #dcfce7; color: #15803d; }
+.s-returned-to-stock { background: #dcfce7; color: #15803d; }
+.s-adjustment-increase { background: #dcfce7; color: #15803d; }
+.s-allocated-to-project { background: #dbeafe; color: #1d4ed8; }
+.s-adjustment-decrease { background: #fef3c7; color: #92400e; }
+.s-damaged-written-off { background: #fee2e2; color: #b91c1c; }
+.risk-flag { font-size: 0.68rem; font-weight: 700; margin-left: 4px; }
+.risk-flag.risk { color: #b91c1c; }
+.risk-flag.soon { color: #b45309; }
+
+.empty-state { text-align: center; padding: 4rem 2rem; color: var(--gray-300); }
+.empty-state .icon { font-size: 2.2rem; margin-bottom: 0.8rem; }
+.empty-state h3 { font-family: var(--font-serif); font-size: 1.2rem; color: var(--gray-500); margin-bottom: 0.4rem; }
+.empty-state p { font-size: 0.8rem; }
+
+/* ============================================
+   FORMS
+   ============================================ */
+.form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+.form-grid-2 { grid-template-columns: repeat(2, 1fr); }
+.form-grid-4 { grid-template-columns: repeat(4, 1fr); }
+.form-group { display: flex; flex-direction: column; gap: 0.35rem; }
+.form-group.full { grid-column: 1 / -1; }
+.form-group label { font-size: 0.63rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--gray-500); font-weight: 700; }
+.form-group input, .form-group select, .form-group textarea {
+  padding: 0.55rem 0.7rem; border: 1px solid #ddd; border-radius: var(--radius);
+  font-family: var(--font-sans); font-size: 0.84rem; outline: none; transition: border-color 0.2s; background: var(--white); width: 100%;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--black); }
+.form-group textarea { resize: vertical; min-height: 66px; }
+@media (max-width: 640px) { .form-grid, .form-grid-2, .form-grid-4 { grid-template-columns: 1fr; } }
+
+/* ============================================
+   BUTTONS
+   ============================================ */
+.btn {
+  padding: 0.56rem 1.1rem; border-radius: var(--radius); font-family: var(--font-sans);
+  font-size: 0.78rem; font-weight: 600; cursor: pointer; border: 1px solid transparent;
+  transition: all 0.18s; letter-spacing: 0.03em; display: inline-flex; align-items: center; gap: 0.4rem;
+}
+.btn-primary { background: var(--black); color: var(--white); border-color: var(--black); }
+.btn-primary:hover { background: var(--gray-900); }
+.btn-secondary { background: var(--white); color: var(--black); border-color: #ccc; }
+.btn-secondary:hover { border-color: var(--black); }
+.btn-ghost { background: none; color: var(--gray-700); border-color: transparent; }
+.btn-ghost:hover { background: var(--gray-100); color: var(--black); }
+.btn-danger { background: #dc2626; color: var(--white); border-color: #dc2626; }
+.btn-danger:hover { background: #b91c1c; }
+.btn-sm { padding: 0.36rem 0.75rem; font-size: 0.72rem; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ============================================
+   MODALS
+   ============================================ */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 1000;
+  align-items: flex-start; justify-content: center; padding: 2.5rem 1rem; overflow-y: auto;
+}
+.modal-overlay.open { display: flex; }
+.modal { background: var(--white); border-radius: 8px; width: 100%; max-width: 620px; display: flex; flex-direction: column; max-height: 88vh; overflow: hidden; margin: auto 0; }
+.modal.wide { max-width: 880px; }
+.modal-header { padding: 1.2rem 1.5rem; border-bottom: 1px solid var(--gray-100); display: flex; align-items: center; }
+.modal-header h3 { font-family: var(--font-serif); font-size: 1.15rem; font-weight: 400; margin-right: auto; }
+.modal-body { flex: 1; overflow-y: auto; padding: 1.5rem; }
+.modal-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--gray-100); display: flex; justify-content: flex-end; gap: 0.6rem; }
+
+/* ============================================
+   TABS
+   ============================================ */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--gray-100); margin-bottom: 16px; }
+.tabs button { background: none; border: none; padding: 10px 14px; font-size: 0.78rem; font-weight: 600; color: var(--gray-500); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; font-family: var(--font-sans); }
+.tabs button.active { color: var(--black); border-color: var(--black); }
+
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; margin-bottom: 4px; }
+.detail-item .k { font-size: 0.63rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--gray-500); font-weight: 700; }
+.detail-item .v { font-size: 0.86rem; margin-top: 3px; }
+
+/* ============================================
+   TOAST
+   ============================================ */
+.toast {
+  position: fixed; bottom: 1.5rem; right: 1.5rem; background: var(--dark); color: var(--white);
+  padding: 0.75rem 1.2rem; border-radius: var(--radius); font-size: 0.82rem; z-index: 9999;
+  transform: translateY(80px); opacity: 0; transition: all 0.3s ease; max-width: 320px;
+  box-shadow: var(--shadow-lg); line-height: 1.4;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.success { border-left: 3px solid #22c55e; }
+.toast.error { border-left: 3px solid #ef4444; }
+
+/* ============================================
+   MISC
+   ============================================ */
+.hidden { display: none !important; }
+.link-btn { background: none; border: none; color: var(--black); text-decoration: underline; font-weight: 600; cursor: pointer; padding: 0; font-size: 0.8rem; font-family: var(--font-sans); }
+
+@media (max-width: 700px) {
+  .app-nav { height: auto; padding: 0.5rem 1rem; }
+  .app-content { padding: 1.1rem 1rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================
+     MAIN APP
+     ============================================ -->
+<div id="app-main">
+  <nav class="app-nav">
+    <div class="nav-brand" onclick="showDashboard()">
+      <span class="name">EUROLUX</span>
+      <span class="vline"></span>
+      <span class="sub">Inventory &amp; Stock</span>
+    </div>
+    <button class="nav-btn" data-route="dashboard" onclick="showDashboard()">Dashboard</button>
+    <button class="nav-btn" data-route="items" onclick="showStockItems()">Stock Items</button>
+    <button class="nav-btn" data-route="movements" onclick="showMovements()">Movements</button>
+    <button class="nav-btn primary" onclick="openMovementForm(null)">+ Log Movement</button>
+    <button class="nav-btn" id="install-btn" onclick="installPWA()" style="display:none;" title="Install app">&#8681; Install</button>
+    <button class="nav-btn" onclick="openSettings()" title="Settings" style="font-size:1rem;padding:0.2rem 0.6rem;">&#9881;</button>
+  </nav>
+
+  <div class="app-content" id="view-root">
+    <!-- Views are rendered here by JS -->
+  </div>
+
+  <div class="app-footer">Eurolux Projects and Procurement Management system &mdash; Developed with love by Uncle Ed, Version 4.20</div>
+</div>
+
+<!-- ============================================
+     STOCK ITEM FORM MODAL (view / edit)
+     ============================================ -->
+<div class="modal-overlay" id="item-modal" onclick="if(event.target===this)closeItemForm()">
+  <div class="modal wide">
+    <div class="modal-header">
+      <h3 id="item-modal-ttl">New Stock Item</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeItemForm()">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid form-grid-2">
+        <div class="form-group"><label>SKU</label><input type="text" id="if-sku" placeholder="auto if left blank" /></div>
+        <div class="form-group"><label>System *</label><input type="text" id="if-system" placeholder="e.g. AS PD 54" /></div>
+        <div class="form-group full"><label>Description *</label><input type="text" id="if-description" /></div>
+        <div class="form-group"><label>Width (mm)</label><input type="number" id="if-width" step="0.1" /></div>
+        <div class="form-group"><label>Height (mm)</label><input type="number" id="if-height" step="0.1" /></div>
+        <div class="form-group"><label>Configuration</label><input type="text" id="if-config" placeholder="e.g. 1 Fixed + 1 Sliding" /></div>
+        <div class="form-group"><label>Opening Direction</label><input type="text" id="if-opendir" placeholder="e.g. Left Opening" /></div>
+        <div class="form-group"><label>Track</label><input type="text" id="if-track" placeholder="e.g. 2 Track" /></div>
+        <div class="form-group"><label>Threshold</label><input type="text" id="if-threshold" /></div>
+        <div class="form-group"><label>Reorder Level <span style="font-weight:400;text-transform:none;">(optional)</span></label><input type="number" id="if-reorder" step="0.01" placeholder="alert when balance falls to/below this" /></div>
+      </div>
+      <div class="form-group full" style="margin-top:1rem;"><label>Notes</label><textarea id="if-notes"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="if-delete-btn" style="color:#c00;display:none;" onclick="deleteItemFromForm()">Delete</button>
+      <button class="btn btn-secondary" id="if-close-btn" onclick="closeItemForm()" style="display:none;">Close</button>
+      <button class="btn btn-secondary" id="if-cancel-btn" onclick="closeItemForm()">Cancel</button>
+      <button class="btn btn-primary" id="if-edit-btn" onclick="switchItemFormToEdit()" style="display:none;">Edit</button>
+      <button class="btn btn-primary" id="if-save-btn" onclick="saveItem()">Save Item</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================
+     MOVEMENT FORM MODAL (view / edit)
+     ============================================ -->
+<div class="modal-overlay" id="movement-modal" onclick="if(event.target===this)closeMovementForm()">
+  <div class="modal wide">
+    <div class="modal-header">
+      <h3 id="movement-modal-ttl">Log Movement</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeMovementForm()">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid form-grid-2">
+        <div class="form-group full"><label>Stock Item *</label><select id="mf-item"></select></div>
+        <div class="form-group">
+          <label>Movement Type *</label>
+          <select id="mf-type" onchange="onMovementTypeChange()">
+            <option>Stock In</option>
+            <option>Allocated to Project</option>
+            <option>Returned to Stock</option>
+            <option>Adjustment Increase</option>
+            <option>Adjustment Decrease</option>
+            <option>Damaged / Written Off</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Quantity *</label><input type="number" id="mf-qty" step="0.01" min="0.01" /></div>
+        <div class="form-group full" id="mf-project-wrap">
+          <label>Project <span style="font-weight:400;text-transform:none;">(optional)</span></label>
+          <div style="display:flex;gap:0.5rem;">
+            <select id="mf-project" style="flex:1;"><option value="">&mdash; none &mdash;</option></select>
+            <button type="button" class="btn btn-secondary btn-sm" style="white-space:nowrap;" onclick="openQuickProjectForm()">+ New Project</button>
+          </div>
+        </div>
+        <div class="form-group"><label>Reference <span style="font-weight:400;text-transform:none;">(PO / work order / reason)</span></label><input type="text" id="mf-reference" /></div>
+        <div class="form-group"><label>Moved By</label><input type="text" id="mf-moved-by" /></div>
+        <div class="form-group"><label>Date *</label><input type="date" id="mf-date" /></div>
+      </div>
+      <div class="form-group full" style="margin-top:1rem;"><label>Notes</label><textarea id="mf-notes"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="mf-close-btn" onclick="closeMovementForm()" style="display:none;">Close</button>
+      <button class="btn btn-secondary" id="mf-cancel-btn" onclick="closeMovementForm()">Cancel</button>
+      <button class="btn btn-ghost" style="color:#c00;" id="mf-delete-btn" onclick="deleteMovementFromForm()" style="display:none;">Delete</button>
+      <button class="btn btn-primary" id="mf-edit-btn" onclick="switchMovementFormToEdit()" style="display:none;">Edit</button>
+      <button class="btn btn-primary" id="mf-save-btn" onclick="saveMovement()">Save Movement</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================
+     QUICK ADD PROJECT MODAL (writes to the shared PPMS projects table)
+     ============================================ -->
+<div class="modal-overlay" id="quick-project-modal" onclick="if(event.target===this)closeQuickProjectForm()">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-header">
+      <h3>New Project</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeQuickProjectForm()">&#10005;</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:1rem;">
+      <p style="font-size:0.78rem;color:var(--gray-500);">This adds a project to the same list used by your Project &amp; Procurement Management System. For full project details (contractor, value, dates, etc.) use that app &mdash; this just adds the basics so you can allocate stock to it right away.</p>
+      <div class="form-group"><label>Site / Project Name *</label><input type="text" id="qp-site" /></div>
+      <div class="form-group"><label>Ref <span style="font-weight:400;text-transform:none;">(optional)</span></label><input type="text" id="qp-ref" placeholder="e.g. P-0061" /></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeQuickProjectForm()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveQuickProject()">Add Project</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================
+     GENERIC DASHBOARD DRILL-DOWN LIST MODAL
+     ============================================ -->
+<div class="modal-overlay" id="list-modal" onclick="if(event.target===this)closeListModal()">
+  <div class="modal wide">
+    <div class="modal-header">
+      <h3 id="list-modal-ttl">Details</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeListModal()">&#10005;</button>
+    </div>
+    <div class="modal-body" id="list-modal-body"></div>
+  </div>
+</div>
+
+<!-- ============================================
+     SETTINGS MODAL
+     ============================================ -->
+<div class="modal-overlay" id="settings-modal" onclick="if(event.target===this)closeSettings()">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <h3>Settings</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeSettings()">&#10005;</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:1rem;">
+      <p style="font-size:0.78rem;color:var(--gray-500);">This app shares the same Supabase project as your Project &amp; Procurement Management System.</p>
+      <div class="form-group"><label>Supabase URL</label><input type="url" id="s-url" /></div>
+      <div class="form-group"><label>Supabase Anon Key</label><input type="password" id="s-key" /></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Save &amp; Reconnect</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM DIALOG -->
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header"><h3>Confirm</h3></div>
+    <div class="modal-body"><p id="confirm-msg" style="font-size:0.85rem;"></p></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="confirm-cancel-btn">Cancel</button>
+      <button class="btn btn-danger" id="confirm-ok-btn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+'use strict';
+
+// ============================================
+// CONSTANTS
+// ============================================
+var MOVEMENT_TYPES = ['Stock In', 'Allocated to Project', 'Returned to Stock', 'Adjustment Increase', 'Adjustment Decrease', 'Damaged / Written Off'];
+var OUTBOUND_TYPES = ['Allocated to Project', 'Adjustment Decrease', 'Damaged / Written Off'];
+var DEFAULT_URL = 'https://abpripqpxxdsycbijljx.supabase.co';
+var DEFAULT_KEY = 'sb_publishable_dclyk5YVYuwUjqOlIc5hEg_TqhxW8GR';
+var PPMS_APP_URL = 'https://euroluxprojects.vercel.app'; // your live Project & Procurement app
+
+// ============================================
+// STATE
+// ============================================
+var sb = null;
+var _allStockItemsCache = [];
+var _allProjectsCache = [];
+var stockItemsFilter = { search: '', system: '' };
+var movementsFilter = { itemId: '', type: '', from: '', to: '' };
+var editingItemId = null;
+var itemFormMode = 'edit';
+var editingMovementId = null;
+var movementFormMode = 'edit';
+var currentItemId = null;
+var navStack = []; // {name, arg} entries — powers the generic Back button
+var _isBackNav = false;
+function recordNav(name, arg) {
+  if (_isBackNav) return;
+  navStack.push({ name: name, arg: arg });
+}
+function hasBack() { return navStack.length > 1; }
+function goBack() {
+  if (navStack.length <= 1) { showDashboard(); return; }
+  navStack.pop(); // discard current view
+  var prev = navStack[navStack.length - 1]; // new top = the view we're returning to
+  _isBackNav = true;
+  if (prev.name === 'dashboard') showDashboard();
+  else if (prev.name === 'items') showStockItems();
+  else if (prev.name === 'itemDetail') showStockItemDetail(prev.arg);
+  else if (prev.name === 'movements') showMovements();
+  _isBackNav = false;
+}
+function backButtonHtml() {
+  return hasBack() ? '<p class="muted" style="margin-bottom:4px;"><button class="link-btn" onclick="goBack()">&larr; Back</button></p>' : '';
+}
+
+// ============================================
+// UTIL HELPERS
+// ============================================
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function nl2br(s) { return esc(s).replace(/\n/g, '<br>'); }
+function slug(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+function movementBadge(type) {
+  if (!type) return '<span class="status-badge">&mdash;</span>';
+  return '<span class="status-badge s-' + slug(type) + '">' + esc(type) + '</span>';
+}
+function todayISO() { return new Date().toISOString().slice(0, 10); }
+function fmtDate(d) {
+  if (!d) return '&mdash;';
+  var dt = new Date(String(d).length <= 10 ? d + 'T00:00:00' : d);
+  if (isNaN(dt.getTime())) return esc(String(d));
+  var dd = String(dt.getDate()).padStart(2, '0');
+  var mm = String(dt.getMonth() + 1).padStart(2, '0');
+  return dd + '/' + mm + '/' + dt.getFullYear();
+}
+function fmtDatePlain(d) {
+  if (!d) return '';
+  var dt = new Date(String(d).length <= 10 ? d + 'T00:00:00' : d);
+  if (isNaN(dt.getTime())) return String(d);
+  var dd = String(dt.getDate()).padStart(2, '0');
+  var mm = String(dt.getMonth() + 1).padStart(2, '0');
+  return dd + '/' + mm + '/' + dt.getFullYear();
+}
+function fmtQty(n) {
+  if (n === null || n === undefined || n === '') return '&mdash;';
+  var num = Number(n);
+  if (isNaN(num)) return '&mdash;';
+  return num % 1 === 0 ? String(num) : num.toFixed(2);
+}
+var _toastTimer;
+function toast(msg, type) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function () { el.className = 'toast ' + (type || ''); }, 3200);
+}
+function downloadCSV(filename, rows) {
+  if (!rows.length) { toast('Nothing to export', 'error'); return; }
+  var cols = Object.keys(rows[0]);
+  function esc1(v) {
+    if (v === null || v === undefined) return '';
+    var s = String(v).replace(/"/g, '""');
+    return /[",\n]/.test(s) ? '"' + s + '"' : s;
+  }
+  var lines = [cols.join(',')].concat(rows.map(function (r) { return cols.map(function (c) { return esc1(r[c]); }).join(','); }));
+  var blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+function printableTable(title, subtitle, columns, rows) {
+  if (!rows.length) { toast('Nothing to export', 'error'); return; }
+  var win = window.open('', '_blank');
+  if (!win) { toast('Please allow pop-ups to export as PDF', 'error'); return; }
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + esc(title) + '</title><style>' +
+    'body{font-family:Arial,Helvetica,sans-serif;padding:28px;color:#111;}' +
+    'h1{font-size:19px;margin-bottom:2px;}' +
+    'p.sub{font-size:12px;color:#666;margin-bottom:18px;}' +
+    'table{width:100%;border-collapse:collapse;font-size:11px;}' +
+    'th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top;}' +
+    'th{background:#111;color:#fff;text-transform:uppercase;letter-spacing:0.04em;font-size:10px;}' +
+    'tr:nth-child(even) td{background:#f7f7f7;}' +
+    '@media print{ body{padding:0;} }' +
+    '</style></head><body>' +
+    '<h1>' + esc(title) + '</h1><p class="sub">' + esc(subtitle) + '</p>' +
+    '<table><thead><tr>' + columns.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+    rows.map(function (r) {
+      return '<tr>' + columns.map(function (c) { var v = r[c]; return '<td>' + (v == null || v === '' ? '&mdash;' : esc(v)) + '</td>'; }).join('') + '</tr>';
+    }).join('') +
+    '</tbody></table>' +
+    '<script>window.onload = function () { window.print(); };<' + '/script>' +
+    '</body></html>';
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+}
+function confirmDialog(msg, onConfirm) {
+  document.getElementById('confirm-msg').textContent = msg;
+  var modal = document.getElementById('confirm-modal');
+  modal.classList.add('open');
+  var okBtn = document.getElementById('confirm-ok-btn');
+  var cancelBtn = document.getElementById('confirm-cancel-btn');
+  function cleanup() { modal.classList.remove('open'); okBtn.onclick = null; cancelBtn.onclick = null; }
+  okBtn.onclick = function () { cleanup(); Promise.resolve(onConfirm()).catch(function (e) { toast('Failed: ' + e.message, 'error'); }); };
+  cancelBtn.onclick = cleanup;
+}
+function isLowStock(item) {
+  return item.reorder_level != null && Number(item.balance) <= Number(item.reorder_level);
+}
+
+// ============================================
+// SUPABASE DATA ACCESS
+// ============================================
+function listStockItems() {
+  return sb.from('v_stock_balance').select('*').order('system').then(function (r) { if (r.error) throw r.error; return r.data || []; });
+}
+function getStockItem(id) {
+  return sb.from('v_stock_balance').select('*').eq('id', id).single().then(function (r) { if (r.error) throw r.error; return r.data; });
+}
+function createStockItem(payload) {
+  return sb.from('stock_items').insert(payload).select().single().then(function (r) { if (r.error) throw r.error; return r.data; });
+}
+function updateStockItem(id, payload) {
+  return sb.from('stock_items').update(payload).eq('id', id).select().single().then(function (r) { if (r.error) throw r.error; return r.data; });
+}
+function deleteStockItemRow(id) {
+  return sb.from('stock_items').delete().eq('id', id).then(function (r) { if (r.error) throw r.error; });
+}
+function listMovements() {
+  return sb.from('v_stock_movements').select('*').order('moved_at', { ascending: false }).order('created_at', { ascending: false }).then(function (r) {
+    if (r.error) throw r.error; return r.data || [];
+  });
+}
+function listMovementsForItem(itemId) {
+  return sb.from('v_stock_movements').select('*').eq('item_id', itemId).order('moved_at', { ascending: false }).then(function (r) {
+    if (r.error) throw r.error; return r.data || [];
+  });
+}
+function createMovement(payload) {
+  return sb.from('stock_movements').insert(payload).select().single().then(function (r) { if (r.error) throw r.error; return r.data; });
+}
+function updateMovement(id, payload) {
+  return sb.from('stock_movements').update(payload).eq('id', id).select().single().then(function (r) { if (r.error) throw r.error; return r.data; });
+}
+function deleteMovementRow(id) {
+  return sb.from('stock_movements').delete().eq('id', id).then(function (r) { if (r.error) throw r.error; });
+}
+function listProjectsForDropdown() {
+  return sb.from('projects').select('id,ref,site_name').order('site_name').then(function (r) { if (r.error) throw r.error; return r.data || []; });
+}
+function createProjectQuick(payload) {
+  return sb.from('projects').insert(payload).select('id,ref,site_name').single().then(function (r) { if (r.error) throw r.error; return r.data; });
+}
+
+// ============================================
+// INIT / CONNECT
+// ============================================
+window.addEventListener('DOMContentLoaded', function () {
+  var url = localStorage.getItem('inv_sb_url') || DEFAULT_URL;
+  var key = localStorage.getItem('inv_sb_key') || DEFAULT_KEY;
+  connect(url, key);
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/service-worker.js').catch(function (e) { console.warn('[PWA] SW registration failed:', e); });
+    });
+  }
+});
+
+var _deferredInstall = null;
+window.addEventListener('beforeinstallprompt', function (e) {
+  e.preventDefault();
+  _deferredInstall = e;
+  var btn = document.getElementById('install-btn');
+  if (btn) btn.style.display = '';
+});
+function installPWA() {
+  if (!_deferredInstall) return;
+  _deferredInstall.prompt();
+  _deferredInstall.userChoice.then(function (result) {
+    if (result.outcome === 'accepted') document.getElementById('install-btn').style.display = 'none';
+    _deferredInstall = null;
+  });
+}
+window.addEventListener('appinstalled', function () {
+  var btn = document.getElementById('install-btn');
+  if (btn) btn.style.display = 'none';
+});
+
+function connect(url, key) {
+  try {
+    sb = supabase.createClient(url, key);
+  } catch (e) {
+    toast('Connection error: ' + e.message, 'error');
+    return;
+  }
+  document.getElementById('app-main').style.display = 'flex';
+  listProjectsForDropdown().then(function (projects) {
+    _allProjectsCache = projects;
+    showDashboard();
+  }).catch(function (e) {
+    toast('Could not load projects: ' + e.message, 'error');
+    document.getElementById('view-root').innerHTML = '<div class="empty-state"><div class="icon">&#9888;&#65039;</div><h3>Connection problem</h3><p>' + esc(e.message) + '</p><p style="margin-top:1rem;">Check your Supabase URL/key in Settings, and make sure supabase_setup_inventory.sql has been run.</p></div>';
+  });
+}
+function openSettings() {
+  document.getElementById('s-url').value = localStorage.getItem('inv_sb_url') || DEFAULT_URL;
+  document.getElementById('s-key').value = localStorage.getItem('inv_sb_key') || DEFAULT_KEY;
+  document.getElementById('settings-modal').classList.add('open');
+}
+function closeSettings() { document.getElementById('settings-modal').classList.remove('open'); }
+function saveSettings() {
+  var url = document.getElementById('s-url').value.trim();
+  var key = document.getElementById('s-key').value.trim();
+  if (!url || !key) { toast('Both fields required', 'error'); return; }
+  localStorage.setItem('inv_sb_url', url);
+  localStorage.setItem('inv_sb_key', key);
+  toast('Settings saved. Reconnecting...', 'success');
+  closeSettings();
+  connect(url, key);
+}
+
+// ============================================
+// NAV / ROUTING
+// ============================================
+function setActiveNav(route) {
+  Array.prototype.forEach.call(document.querySelectorAll('.nav-btn[data-route]'), function (b) {
+    b.classList.toggle('active', b.dataset.route === route);
+  });
+}
+function render(html) { document.getElementById('view-root').innerHTML = html; }
+
+// ============================================
+// GENERIC DRILL-DOWN LIST MODAL
+// ============================================
+function openListModal(title, bodyHtml) {
+  document.getElementById('list-modal-ttl').textContent = title;
+  document.getElementById('list-modal-body').innerHTML = bodyHtml;
+  document.getElementById('list-modal').classList.add('open');
+}
+function closeListModal() { document.getElementById('list-modal').classList.remove('open'); }
+
+// ============================================
+// DASHBOARD
+// ============================================
+function showDashboard() {
+  recordNav('dashboard');
+  setActiveNav('dashboard');
+  render('<div class="empty-state"><span style="display:inline-block;width:22px;height:22px;border:2px solid #ddd;border-top-color:#000;border-radius:50%;animation:spin .7s linear infinite;"></span></div>');
+  Promise.all([listStockItems(), listMovements()]).then(function (results) {
+    renderDashboard(results[0], results[1]);
+  }).catch(function (e) { toast('Load failed: ' + e.message, 'error'); });
+}
+function renderDashboard(items, movements) {
+  window._dashItems = items;
+  window._dashMovements = movements;
+  var totalItems = items.length;
+  var totalBalance = items.reduce(function (s, i) { return s + Number(i.balance || 0); }, 0);
+  var lowStock = items.filter(isLowStock);
+  var today = todayISO();
+  var thisMonth = today.slice(0, 7);
+  var movementsThisMonth = movements.filter(function (m) { return (m.moved_at || '').slice(0, 7) === thisMonth; });
+
+  var bySystem = {};
+  items.forEach(function (i) {
+    var k = i.system || 'Unassigned';
+    bySystem[k] = (bySystem[k] || 0) + Number(i.balance || 0);
+  });
+  var systemRows = Object.keys(bySystem).map(function (k) { return [k, bySystem[k]]; }).sort(function (a, b) { return b[1] - a[1]; });
+  var maxSys = Math.max(1, Math.max.apply(null, systemRows.map(function (r) { return r[1]; }).concat([0])));
+
+  var recent = movements.slice(0, 10);
+
+  render(
+    '<div class="dashboard-header"><div><h1>Dashboard</h1><p>Stock overview across all SCHUCO items.</p></div>' +
+      '<div class="search-wrap"><a class="btn btn-secondary btn-sm" href="' + PPMS_APP_URL + '" target="_blank" rel="noopener">Project &amp; Procurement App &rarr;</a></div>' +
+    '</div>' +
+    '<div class="stats-bar">' +
+      '<div class="stat-pill" style="cursor:pointer;" onclick="showStockItems()" title="View all stock items"><strong>' + totalItems + '</strong>Stock Item Types</div>' +
+      '<div class="stat-pill good"><strong>' + fmtQty(totalBalance) + '</strong>Total Units In Stock</div>' +
+      '<div class="stat-pill danger" style="cursor:pointer;" onclick="showLowStockModal()" title="View low stock items"><strong>' + lowStock.length + '</strong>Low Stock</div>' +
+      '<div class="stat-pill" style="cursor:pointer;" onclick="showMovements()" title="View all movements"><strong>' + movements.length + '</strong>Total Movements Logged</div>' +
+      '<div class="stat-pill warn"><strong>' + movementsThisMonth.length + '</strong>Movements This Month</div>' +
+    '</div>' +
+    '<div class="grid-2">' +
+      '<div class="section-card"><h3>Stock by System</h3>' +
+        (systemRows.length ? systemRows.map(function (s) {
+          return '<div class="bar-row" style="cursor:pointer;" onclick="goToItemsWithSystem(\'' + esc(s[0]).replace(/'/g, "\\'") + '\')" title="View ' + esc(s[0]) + ' items"><div class="lbl">' + esc(s[0]) + '</div><div class="track"><div style="width:' + (s[1] / maxSys * 100) + '%"></div></div><div class="val">' + fmtQty(s[1]) + '</div></div>';
+        }).join('') : '<div class="empty-state">No stock items yet.</div>') +
+      '</div>' +
+      '<div class="section-card"><h3>Low Stock</h3>' +
+        (lowStock.length ? lowStock.map(function (i) {
+          return '<div style="padding:8px 0;border-bottom:1px solid var(--gray-100)"><button class="link-btn" onclick="showStockItemDetail(\'' + i.id + '\')">' + esc(i.system) + ' &mdash; ' + esc(i.description) + '</button><div class="muted" style="font-size:0.74rem;color:var(--gray-500);margin-top:2px;">Balance: ' + fmtQty(i.balance) + ' / Reorder at: ' + fmtQty(i.reorder_level) + '</div></div>';
+        }).join('') : '<div class="empty-state"><div class="icon">&#10004;&#65039;</div>Nothing below reorder level.</div>') +
+      '</div>' +
+    '</div>' +
+    '<div class="section-card" style="margin-top:1.25rem;"><h3>Recent Movements</h3>' +
+      (recent.length ? '<div class="quotes-list-wrap"><table class="quotes-list"><thead><tr><th>Date</th><th>Item</th><th>Type</th><th class="r">Qty</th><th>Project</th></tr></thead><tbody>' +
+        recent.map(function (m) {
+          return '<tr onclick="showStockItemDetail(\'' + m.item_id + '\')">' +
+            '<td class="muted">' + fmtDate(m.moved_at) + '</td>' +
+            '<td>' + esc(m.system) + ' &mdash; ' + esc(m.item_description) + '</td>' +
+            '<td>' + movementBadge(m.movement_type) + '</td>' +
+            '<td class="r">' + fmtQty(m.quantity) + '</td>' +
+            '<td class="muted">' + esc(m.project_site_name || '&mdash;') + '</td>' +
+            '</tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="empty-state">No movements logged yet.</div>') +
+    '</div>'
+  );
+}
+function showLowStockModal() {
+  var rows = (window._dashItems || []).filter(isLowStock);
+  var html = rows.length ? (
+    '<div class="quotes-list-wrap"><table class="quotes-list"><thead><tr><th>System</th><th>Description</th><th class="r">Balance</th><th class="r">Reorder Level</th></tr></thead><tbody>' +
+    rows.map(function (i) {
+      return '<tr onclick="closeListModal();showStockItemDetail(\'' + i.id + '\')">' +
+        '<td>' + esc(i.system) + '</td><td>' + esc(i.description) + '</td>' +
+        '<td class="r">' + fmtQty(i.balance) + '</td><td class="r">' + fmtQty(i.reorder_level) + '</td>' +
+        '</tr>';
+    }).join('') + '</tbody></table></div>'
+  ) : '<div class="empty-state">Nothing below reorder level.</div>';
+  openListModal('Low Stock &mdash; ' + rows.length, html);
+}
+function goToItemsWithSystem(system) {
+  stockItemsFilter = { search: '', system: system };
+  showStockItems();
+}
+
+// ============================================
+// STOCK ITEMS LIST
+// ============================================
+function showStockItems() {
+  recordNav('items');
+  setActiveNav('items');
+  render('<div class="empty-state">Loading stock items&hellip;</div>');
+  listStockItems().then(function (items) {
+    _allStockItemsCache = items;
+    renderStockItemsList();
+  }).catch(function (e) { toast('Load failed: ' + e.message, 'error'); });
+}
+function applyStockItemsFilters(items) {
+  return items.filter(function (i) {
+    if (stockItemsFilter.search) {
+      var s = stockItemsFilter.search.toLowerCase();
+      var hay = (i.system + ' ' + i.description + ' ' + (i.sku || '') + ' ' + (i.configuration || '')).toLowerCase();
+      if (hay.indexOf(s) === -1) return false;
+    }
+    if (stockItemsFilter.system && i.system !== stockItemsFilter.system) return false;
+    return true;
+  });
+}
+function buildStockItemsRowsHtml(filtered) {
+  return filtered.length ? (
+    '<table class="quotes-list"><thead><tr><th>SKU</th><th>System</th><th>Description</th><th>Size</th><th class="r">Used</th><th class="r">Balance</th><th></th></tr></thead><tbody>' +
+    filtered.map(function (i) {
+      var low = isLowStock(i);
+      return '<tr onclick="showStockItemDetail(\'' + i.id + '\')">' +
+        '<td class="muted">' + esc(i.sku || '&mdash;') + '</td>' +
+        '<td><b>' + esc(i.system) + '</b></td>' +
+        '<td>' + esc(i.description) + (i.configuration ? '<div class="muted">' + esc(i.configuration) + '</div>' : '') + '</td>' +
+        '<td class="muted">' + (i.width_mm && i.height_mm ? (i.width_mm + ' x ' + i.height_mm + ' mm') : '&mdash;') + '</td>' +
+        '<td class="r muted">' + fmtQty(i.used_qty) + '</td>' +
+        '<td class="r">' + fmtQty(i.balance) + (low ? '<span class="risk-flag risk">Low</span>' : '') + '</td>' +
+        '<td class="r"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openMovementForm(\'' + i.id + '\')">+ Movement</button></td>' +
+        '</tr>';
+    }).join('') + '</tbody></table>'
+  ) : '<div class="empty-state"><div class="icon">&#128230;</div><h3>No stock items match</h3><p>Try clearing filters.</p></div>';
+}
+function renderStockItemsList() {
+  var filtered = applyStockItemsFilters(_allStockItemsCache);
+  var systems = _allStockItemsCache.map(function (i) { return i.system; }).filter(Boolean).reduce(function (acc, v) { if (acc.indexOf(v) === -1) acc.push(v); return acc; }, []).sort();
+
+  render(
+    '<div class="dashboard-header">' +
+      '<div>' + backButtonHtml() + '<h1>Stock Items</h1><p id="items-count-label">' + filtered.length + ' of ' + _allStockItemsCache.length + ' items</p></div>' +
+      '<div class="search-wrap">' +
+        '<button class="btn btn-secondary btn-sm" onclick="exportStockItemsCSV()">Export CSV</button>' +
+        '<button class="btn btn-secondary btn-sm" onclick="exportStockItemsPDF()">Export PDF</button>' +
+        '<button class="btn btn-primary btn-sm" onclick="openItemForm(null)">+ New Item</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="search-wrap" style="margin-bottom:1rem;">' +
+      '<input type="text" class="search-bar" id="si-search-input" placeholder="Search SKU, system, description&hellip;" value="' + esc(stockItemsFilter.search) + '" oninput="onStockItemsFilterChange()" />' +
+      '<select class="status-filter" id="si-system-input" onchange="onStockItemsFilterChange()"><option value="">All Systems</option>' +
+        systems.map(function (s) { return '<option ' + (s === stockItemsFilter.system ? 'selected' : '') + '>' + esc(s) + '</option>'; }).join('') +
+      '</select>' +
+      '<button class="btn btn-ghost btn-sm" onclick="clearStockItemsFilters()">Clear</button>' +
+    '</div>' +
+    '<div class="quotes-list-wrap" id="items-rows">' + buildStockItemsRowsHtml(filtered) + '</div>'
+  );
+}
+function onStockItemsFilterChange() {
+  stockItemsFilter.search = document.getElementById('si-search-input').value;
+  stockItemsFilter.system = document.getElementById('si-system-input').value;
+  var filtered = applyStockItemsFilters(_allStockItemsCache);
+  var rowsEl = document.getElementById('items-rows');
+  if (rowsEl) rowsEl.innerHTML = buildStockItemsRowsHtml(filtered);
+  var labelEl = document.getElementById('items-count-label');
+  if (labelEl) labelEl.textContent = filtered.length + ' of ' + _allStockItemsCache.length + ' items';
+}
+function clearStockItemsFilters() {
+  stockItemsFilter = { search: '', system: '' };
+  renderStockItemsList();
+}
+function exportStockItemsCSV() {
+  var filtered = applyStockItemsFilters(_allStockItemsCache);
+  downloadCSV('eurolux-stock-items.csv', filtered.map(function (i) {
+    return { SKU: i.sku, System: i.system, Description: i.description, WidthMM: i.width_mm, HeightMM: i.height_mm, Configuration: i.configuration, OpeningDirection: i.opening_direction, Track: i.track, Threshold: i.threshold, Used: i.used_qty, Balance: i.balance, ReorderLevel: i.reorder_level };
+  }));
+}
+function exportStockItemsPDF() {
+  var filtered = applyStockItemsFilters(_allStockItemsCache);
+  var rows = filtered.map(function (i) {
+    return {
+      SKU: i.sku, System: i.system, Description: i.description,
+      Size: (i.width_mm && i.height_mm) ? (i.width_mm + ' x ' + i.height_mm + ' mm') : '',
+      Used: i.used_qty, Balance: i.balance
+    };
+  });
+  printableTable('Eurolux Stock Items', filtered.length + ' item(s)', ['SKU', 'System', 'Description', 'Size', 'Used', 'Balance'], rows);
+}
+
+// ============================================
+// STOCK ITEM DETAIL
+// ============================================
+function showStockItemDetail(id) {
+  recordNav('itemDetail', id);
+  currentItemId = id;
+  setActiveNav('items');
+  render('<div class="empty-state">Loading item&hellip;</div>');
+  Promise.all([getStockItem(id), listMovementsForItem(id)]).then(function (results) {
+    renderStockItemDetail(results[0], results[1]);
+  }).catch(function (e) {
+    render('<div class="empty-state"><h3>Item not found</h3><p>' + esc(e.message) + '</p></div>');
+  });
+}
+function renderStockItemDetail(item, movements) {
+  window.currentItemData = item;
+  window._allMovementsCache = movements; // so clicking a row here can find it in openMovementFormById
+  var low = isLowStock(item);
+  render(
+    '<div class="dashboard-header">' +
+      '<div>' + backButtonHtml() + '<h1>' + esc(item.system) + '</h1><p>' + esc(item.description) + '</p></div>' +
+      '<div class="search-wrap">' +
+        '<button class="btn btn-secondary btn-sm" onclick="openMovementForm(currentItemData.id)">+ Log Movement</button>' +
+        '<button class="btn btn-secondary btn-sm" onclick="editItemFormById(currentItemData.id)">Edit</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="section-card">' +
+      '<div class="detail-grid">' +
+        '<div class="detail-item"><div class="k">SKU</div><div class="v">' + esc(item.sku || '&mdash;') + '</div></div>' +
+        '<div class="detail-item"><div class="k">System</div><div class="v">' + esc(item.system) + '</div></div>' +
+        '<div class="detail-item"><div class="k">Size</div><div class="v">' + (item.width_mm && item.height_mm ? (item.width_mm + ' x ' + item.height_mm + ' mm') : '&mdash;') + '</div></div>' +
+        '<div class="detail-item"><div class="k">Configuration</div><div class="v">' + esc(item.configuration || '&mdash;') + '</div></div>' +
+        '<div class="detail-item"><div class="k">Opening Direction</div><div class="v">' + esc(item.opening_direction || '&mdash;') + '</div></div>' +
+        '<div class="detail-item"><div class="k">Track</div><div class="v">' + esc(item.track || '&mdash;') + '</div></div>' +
+        '<div class="detail-item"><div class="k">Threshold</div><div class="v">' + esc(item.threshold || '&mdash;') + '</div></div>' +
+        '<div class="detail-item"><div class="k">Current Balance</div><div class="v">' + fmtQty(item.balance) + (low ? '<span class="risk-flag risk">Low</span>' : '') + '</div></div>' +
+        '<div class="detail-item"><div class="k">Quantity Used</div><div class="v">' + fmtQty(item.used_qty) + '</div></div>' +
+        '<div class="detail-item"><div class="k">Reorder Level</div><div class="v">' + fmtQty(item.reorder_level) + '</div></div>' +
+      '</div>' +
+      (item.notes ? '<div style="margin-top:14px;"><div class="detail-item k">Notes</div><div style="margin-top:4px;white-space:pre-wrap;font-size:0.82rem;">' + nl2br(item.notes) + '</div></div>' : '') +
+    '</div>' +
+    '<div class="section-card"><h3>Movement History (' + movements.length + ')</h3>' +
+      (movements.length ? '<div class="quotes-list-wrap"><table class="quotes-list"><thead><tr><th>Date</th><th>Type</th><th class="r">Qty</th><th>Project</th><th>Reference</th><th>Moved By</th></tr></thead><tbody>' +
+        movements.map(function (m) {
+          return '<tr onclick="openMovementFormById(\'' + m.id + '\')">' +
+            '<td class="muted">' + fmtDate(m.moved_at) + '</td>' +
+            '<td>' + movementBadge(m.movement_type) + '</td>' +
+            '<td class="r">' + fmtQty(m.quantity) + '</td>' +
+            '<td class="muted">' + esc(m.project_site_name || m.project_name_freeform || '&mdash;') + '</td>' +
+            '<td class="muted">' + esc(m.reference || '&mdash;') + '</td>' +
+            '<td class="muted">' + esc(m.moved_by || '&mdash;') + '</td>' +
+            '</tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="empty-state"><div class="icon">&#128230;</div><h3>No movements yet</h3><p>Log the first movement for this item.</p></div>') +
+    '</div>'
+  );
+}
+
+// ============================================
+// STOCK ITEM FORM (modal, view / edit)
+// ============================================
+function openItemForm(item, mode) {
+  var isEdit = !!item;
+  mode = isEdit ? (mode || 'edit') : 'edit'; // new items always open directly in edit mode
+  itemFormMode = mode;
+  document.getElementById('item-modal-ttl').textContent = isEdit ? (mode === 'view' ? 'Stock Item Details' : 'Edit Stock Item') : 'New Stock Item';
+  document.getElementById('if-sku').value = isEdit ? (item.sku || '') : '';
+  document.getElementById('if-system').value = isEdit ? (item.system || '') : '';
+  document.getElementById('if-description').value = isEdit ? (item.description || '') : '';
+  document.getElementById('if-width').value = isEdit && item.width_mm != null ? item.width_mm : '';
+  document.getElementById('if-height').value = isEdit && item.height_mm != null ? item.height_mm : '';
+  document.getElementById('if-config').value = isEdit ? (item.configuration || '') : '';
+  document.getElementById('if-opendir').value = isEdit ? (item.opening_direction || '') : '';
+  document.getElementById('if-track').value = isEdit ? (item.track || '') : '';
+  document.getElementById('if-threshold').value = isEdit ? (item.threshold || '') : '';
+  document.getElementById('if-reorder').value = isEdit && item.reorder_level != null ? item.reorder_level : '';
+  document.getElementById('if-notes').value = isEdit ? (item.notes || '') : '';
+  editingItemId = isEdit ? item.id : null;
+  setItemFormReadOnly(mode === 'view');
+  document.getElementById('item-modal').classList.add('open');
+}
+function editItemFormById(id) {
+  var item = _allStockItemsCache.filter(function (i) { return i.id === id; })[0] || window.currentItemData;
+  openItemForm(item, 'edit');
+}
+function setItemFormReadOnly(readOnly) {
+  ['if-sku', 'if-system', 'if-description', 'if-width', 'if-height', 'if-config', 'if-opendir', 'if-track', 'if-threshold', 'if-reorder', 'if-notes'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.disabled = readOnly;
+  });
+  document.getElementById('if-close-btn').style.display = readOnly ? 'inline-flex' : 'none';
+  document.getElementById('if-cancel-btn').style.display = readOnly ? 'none' : 'inline-flex';
+  document.getElementById('if-edit-btn').style.display = readOnly ? 'inline-flex' : 'none';
+  document.getElementById('if-save-btn').style.display = readOnly ? 'none' : 'inline-flex';
+  document.getElementById('if-delete-btn').style.display = (readOnly || !editingItemId) ? 'none' : 'inline-flex';
+}
+function switchItemFormToEdit() {
+  itemFormMode = 'edit';
+  document.getElementById('item-modal-ttl').textContent = 'Edit Stock Item';
+  setItemFormReadOnly(false);
+}
+function closeItemForm() { document.getElementById('item-modal').classList.remove('open'); }
+function deleteItemFromForm() {
+  if (!editingItemId) return;
+  var id = editingItemId;
+  var label = document.getElementById('if-system').value + ' — ' + document.getElementById('if-description').value;
+  closeItemForm();
+  deleteItemConfirm(id, label);
+}
+function saveItem() {
+  var system = document.getElementById('if-system').value.trim();
+  var description = document.getElementById('if-description').value.trim();
+  if (!system || !description) { toast('System and Description are required', 'error'); return; }
+  var payload = {
+    sku: document.getElementById('if-sku').value.trim() || null,
+    system: system,
+    description: description,
+    width_mm: document.getElementById('if-width').value === '' ? null : Number(document.getElementById('if-width').value),
+    height_mm: document.getElementById('if-height').value === '' ? null : Number(document.getElementById('if-height').value),
+    configuration: document.getElementById('if-config').value.trim() || null,
+    opening_direction: document.getElementById('if-opendir').value.trim() || null,
+    track: document.getElementById('if-track').value.trim() || null,
+    threshold: document.getElementById('if-threshold').value.trim() || null,
+    reorder_level: document.getElementById('if-reorder').value === '' ? null : Number(document.getElementById('if-reorder').value),
+    notes: document.getElementById('if-notes').value.trim() || null
+  };
+  var isEdit = !!editingItemId;
+  var p = isEdit ? updateStockItem(editingItemId, payload) : createStockItem(payload);
+  p.then(function (row) {
+    toast(isEdit ? 'Item updated' : 'Item created', 'success');
+    closeItemForm();
+    if (isEdit) { showStockItemDetail(editingItemId); } else { showStockItemDetail(row.id); }
+  }).catch(function (e) { toast('Save failed: ' + e.message, 'error'); });
+}
+function deleteItemConfirm(id, label) {
+  confirmDialog('Delete stock item "' + label + '"? Its full movement history will be deleted too. This cannot be undone.', function () {
+    return deleteStockItemRow(id).then(function () { toast('Item deleted', 'success'); showStockItems(); });
+  });
+}
+
+// ============================================
+// MOVEMENTS LIST
+// ============================================
+function showMovements() {
+  recordNav('movements');
+  setActiveNav('movements');
+  render('<div class="empty-state">Loading movements&hellip;</div>');
+  Promise.all([listMovements(), listStockItems()]).then(function (results) {
+    window._allMovementsCache = results[0];
+    _allStockItemsCache = results[1];
+    renderMovements();
+  }).catch(function (e) { toast('Load failed: ' + e.message, 'error'); });
+}
+function applyMovementFilters(rows) {
+  return rows.filter(function (m) {
+    if (movementsFilter.itemId && m.item_id !== movementsFilter.itemId) return false;
+    if (movementsFilter.type && m.movement_type !== movementsFilter.type) return false;
+    if (movementsFilter.from && m.moved_at < movementsFilter.from) return false;
+    if (movementsFilter.to && m.moved_at > movementsFilter.to) return false;
+    return true;
+  });
+}
+function renderMovements() {
+  var rows = applyMovementFilters(window._allMovementsCache || []);
+  var tableHtml = rows.length ? (
+    '<table class="quotes-list"><thead><tr><th>Date</th><th>Item</th><th>Type</th><th class="r">Qty</th><th>Project</th><th>Reference</th><th>Moved By</th></tr></thead><tbody>' +
+    rows.map(function (m) {
+      return '<tr onclick="openMovementFormById(\'' + m.id + '\')">' +
+        '<td class="muted">' + fmtDate(m.moved_at) + '</td>' +
+        '<td>' + esc(m.system) + ' &mdash; ' + esc(m.item_description) + (m.sku ? '<div class="muted">' + esc(m.sku) + '</div>' : '') + '</td>' +
+        '<td>' + movementBadge(m.movement_type) + '</td>' +
+        '<td class="r">' + fmtQty(m.quantity) + '</td>' +
+        '<td class="muted">' + esc(m.project_site_name || m.project_name_freeform || '&mdash;') + '</td>' +
+        '<td class="muted">' + esc(m.reference || '&mdash;') + '</td>' +
+        '<td class="muted">' + esc(m.moved_by || '&mdash;') + '</td>' +
+        '</tr>';
+    }).join('') + '</tbody></table>'
+  ) : '<div class="empty-state"><div class="icon">&#128230;</div><h3>No movements match</h3><p>Try clearing filters.</p></div>';
+
+  render(
+    '<div class="dashboard-header"><div>' + backButtonHtml() + '<h1>Movements</h1><p id="movements-count-label">' + rows.length + ' of ' + (window._allMovementsCache || []).length + ' movements</p></div>' +
+      '<div class="search-wrap">' +
+        '<button class="btn btn-secondary btn-sm" onclick="exportMovementsCSV()">Export CSV</button>' +
+        '<button class="btn btn-secondary btn-sm" onclick="exportMovementsPDF()">Export PDF</button>' +
+        '<button class="btn btn-primary btn-sm" onclick="openMovementForm(null)">+ Log Movement</button>' +
+      '</div></div>' +
+    '<div class="search-wrap" style="margin-bottom:1rem;">' +
+      '<select class="status-filter" id="mv-item-input" onchange="onMovementsFilterChange()"><option value="">All Items</option>' +
+        _allStockItemsCache.map(function (i) { return '<option value="' + i.id + '" ' + (i.id === movementsFilter.itemId ? 'selected' : '') + '>' + esc(i.system) + ' &mdash; ' + esc(i.description) + '</option>'; }).join('') +
+      '</select>' +
+      '<select class="status-filter" id="mv-type-input" onchange="onMovementsFilterChange()"><option value="">All Types</option>' +
+        MOVEMENT_TYPES.map(function (t) { return '<option ' + (t === movementsFilter.type ? 'selected' : '') + '>' + esc(t) + '</option>'; }).join('') +
+      '</select>' +
+      '<input type="date" class="date-filter" id="mv-from-input" value="' + movementsFilter.from + '" onchange="onMovementsFilterChange()" />' +
+      '<input type="date" class="date-filter" id="mv-to-input" value="' + movementsFilter.to + '" onchange="onMovementsFilterChange()" />' +
+      '<button class="btn btn-ghost btn-sm" onclick="clearMovementsFilters()">Clear</button>' +
+    '</div>' +
+    '<div class="quotes-list-wrap" id="movements-rows">' + tableHtml + '</div>'
+  );
+}
+function onMovementsFilterChange() {
+  movementsFilter.itemId = document.getElementById('mv-item-input').value;
+  movementsFilter.type = document.getElementById('mv-type-input').value;
+  movementsFilter.from = document.getElementById('mv-from-input').value;
+  movementsFilter.to = document.getElementById('mv-to-input').value;
+  var rows = applyMovementFilters(window._allMovementsCache || []);
+  var rowsEl = document.getElementById('movements-rows');
+  if (rowsEl) rowsEl.innerHTML = rows.length ? buildMovementsRowsHtml(rows) : '<div class="empty-state"><div class="icon">&#128230;</div><h3>No movements match</h3><p>Try clearing filters.</p></div>';
+  var labelEl = document.getElementById('movements-count-label');
+  if (labelEl) labelEl.textContent = rows.length + ' of ' + (window._allMovementsCache || []).length + ' movements';
+}
+function buildMovementsRowsHtml(rows) {
+  return '<table class="quotes-list"><thead><tr><th>Date</th><th>Item</th><th>Type</th><th class="r">Qty</th><th>Project</th><th>Reference</th><th>Moved By</th></tr></thead><tbody>' +
+    rows.map(function (m) {
+      return '<tr onclick="openMovementFormById(\'' + m.id + '\')">' +
+        '<td class="muted">' + fmtDate(m.moved_at) + '</td>' +
+        '<td>' + esc(m.system) + ' &mdash; ' + esc(m.item_description) + (m.sku ? '<div class="muted">' + esc(m.sku) + '</div>' : '') + '</td>' +
+        '<td>' + movementBadge(m.movement_type) + '</td>' +
+        '<td class="r">' + fmtQty(m.quantity) + '</td>' +
+        '<td class="muted">' + esc(m.project_site_name || m.project_name_freeform || '&mdash;') + '</td>' +
+        '<td class="muted">' + esc(m.reference || '&mdash;') + '</td>' +
+        '<td class="muted">' + esc(m.moved_by || '&mdash;') + '</td>' +
+        '</tr>';
+    }).join('') + '</tbody></table>';
+}
+function clearMovementsFilters() {
+  movementsFilter = { itemId: '', type: '', from: '', to: '' };
+  renderMovements();
+}
+function exportMovementsCSV() {
+  var rows = applyMovementFilters(window._allMovementsCache || []);
+  downloadCSV('eurolux-stock-movements.csv', rows.map(function (m) {
+    return { Date: m.moved_at, SKU: m.sku, System: m.system, Item: m.item_description, MovementType: m.movement_type, Quantity: m.quantity, Project: m.project_site_name || m.project_name_freeform, Reference: m.reference, MovedBy: m.moved_by, Notes: m.notes };
+  }));
+}
+function exportMovementsPDF() {
+  var rows = applyMovementFilters(window._allMovementsCache || []);
+  var mapped = rows.map(function (m) {
+    return {
+      Date: fmtDatePlain(m.moved_at), Item: (m.system || '') + ' — ' + (m.item_description || ''), Type: m.movement_type,
+      Qty: m.quantity, Project: m.project_site_name || m.project_name_freeform || '', Reference: m.reference || '', MovedBy: m.moved_by || ''
+    };
+  });
+  printableTable('Eurolux Stock Movements', rows.length + ' movement(s)', ['Date', 'Item', 'Type', 'Qty', 'Project', 'Reference', 'MovedBy'], mapped);
+}
+
+// ============================================
+// MOVEMENT FORM (modal, view / edit)
+// ============================================
+function populateItemDropdown(selectedId) {
+  var sel = document.getElementById('mf-item');
+  sel.innerHTML = '<option value="">&mdash; select item &mdash;</option>' +
+    _allStockItemsCache.map(function (i) {
+      return '<option value="' + i.id + '" ' + (i.id === selectedId ? 'selected' : '') + '>' + esc(i.system) + ' &mdash; ' + esc(i.description) + (i.sku ? ' (' + esc(i.sku) + ')' : '') + '</option>';
+    }).join('');
+}
+function populateProjectDropdown(selectedId) {
+  var sel = document.getElementById('mf-project');
+  sel.innerHTML = '<option value="">&mdash; none &mdash;</option>' +
+    _allProjectsCache.map(function (p) {
+      return '<option value="' + p.id + '" ' + (p.id === selectedId ? 'selected' : '') + '>' + esc(p.site_name) + (p.ref ? ' (' + esc(p.ref) + ')' : '') + '</option>';
+    }).join('');
+}
+function onMovementTypeChange() {
+  // Project field stays visible for every movement type — most useful for
+  // Allocated to Project / Returned to Stock, but handy as context elsewhere too.
+}
+function openQuickProjectForm() {
+  document.getElementById('qp-site').value = '';
+  document.getElementById('qp-ref').value = '';
+  document.getElementById('quick-project-modal').classList.add('open');
+}
+function closeQuickProjectForm() { document.getElementById('quick-project-modal').classList.remove('open'); }
+function saveQuickProject() {
+  var site = document.getElementById('qp-site').value.trim();
+  if (!site) { toast('Site / project name is required', 'error'); return; }
+  var payload = { site_name: site, ref: document.getElementById('qp-ref').value.trim() || null };
+  createProjectQuick(payload).then(function (project) {
+    _allProjectsCache.push(project);
+    _allProjectsCache.sort(function (a, b) { return (a.site_name || '').localeCompare(b.site_name || ''); });
+    populateProjectDropdown(project.id);
+    toast('Project added', 'success');
+    closeQuickProjectForm();
+  }).catch(function (e) { toast('Save failed: ' + e.message, 'error'); });
+}
+function ensureStockItemsLoaded() {
+  if (_allStockItemsCache.length) return Promise.resolve(_allStockItemsCache);
+  return listStockItems().then(function (items) { _allStockItemsCache = items; return items; });
+}
+function openMovementForm(preselectItemId, mode) {
+  ensureStockItemsLoaded().then(function () {
+    editingMovementId = null;
+    movementFormMode = 'edit';
+    document.getElementById('movement-modal-ttl').textContent = 'Log Movement';
+    populateItemDropdown(preselectItemId || '');
+    populateProjectDropdown('');
+    document.getElementById('mf-type').value = 'Stock In';
+    document.getElementById('mf-qty').value = '';
+    document.getElementById('mf-reference').value = '';
+    document.getElementById('mf-moved-by').value = '';
+    document.getElementById('mf-date').value = todayISO();
+    document.getElementById('mf-notes').value = '';
+    document.getElementById('mf-delete-btn').style.display = 'none';
+    setMovementFormReadOnly(false);
+    document.getElementById('movement-modal').classList.add('open');
+  }).catch(function (e) { toast('Load failed: ' + e.message, 'error'); });
+}
+function openMovementFormById(id) {
+  ensureStockItemsLoaded().then(function () {
+    var rows = window._allMovementsCache || [];
+    var m = rows.filter(function (x) { return x.id === id; })[0];
+    if (!m) { toast('Movement not found', 'error'); return; }
+    editingMovementId = id;
+    movementFormMode = 'view';
+    document.getElementById('movement-modal-ttl').textContent = 'Movement Details';
+    populateItemDropdown(m.item_id);
+    populateProjectDropdown(m.project_id);
+    document.getElementById('mf-type').value = m.movement_type;
+    document.getElementById('mf-qty').value = m.quantity;
+    document.getElementById('mf-reference').value = m.reference || '';
+    document.getElementById('mf-moved-by').value = m.moved_by || '';
+    document.getElementById('mf-date').value = m.moved_at;
+    document.getElementById('mf-notes').value = m.notes || '';
+    document.getElementById('mf-delete-btn').style.display = 'none';
+    setMovementFormReadOnly(true);
+    document.getElementById('movement-modal').classList.add('open');
+  }).catch(function (e) { toast('Load failed: ' + e.message, 'error'); });
+}
+function setMovementFormReadOnly(readOnly) {
+  ['mf-item', 'mf-type', 'mf-qty', 'mf-project', 'mf-reference', 'mf-moved-by', 'mf-date', 'mf-notes'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.disabled = readOnly;
+  });
+  document.getElementById('mf-close-btn').style.display = readOnly ? 'inline-flex' : 'none';
+  document.getElementById('mf-cancel-btn').style.display = readOnly ? 'none' : 'inline-flex';
+  document.getElementById('mf-edit-btn').style.display = readOnly ? 'inline-flex' : 'none';
+  document.getElementById('mf-save-btn').style.display = readOnly ? 'none' : 'inline-flex';
+  document.getElementById('mf-delete-btn').style.display = (readOnly || !editingMovementId) ? 'none' : 'inline-flex';
+}
+function switchMovementFormToEdit() {
+  movementFormMode = 'edit';
+  document.getElementById('movement-modal-ttl').textContent = 'Edit Movement';
+  setMovementFormReadOnly(false);
+}
+function closeMovementForm() { document.getElementById('movement-modal').classList.remove('open'); }
+function saveMovement() {
+  var itemId = document.getElementById('mf-item').value;
+  var type = document.getElementById('mf-type').value;
+  var qty = Number(document.getElementById('mf-qty').value);
+  var date = document.getElementById('mf-date').value;
+  if (!itemId) { toast('Select a stock item', 'error'); return; }
+  if (!qty || qty <= 0) { toast('Enter a quantity greater than 0', 'error'); return; }
+  if (!date) { toast('Enter a date', 'error'); return; }
+
+  if (OUTBOUND_TYPES.indexOf(type) !== -1) {
+    var itemRow = _allStockItemsCache.filter(function (i) { return i.id === itemId; })[0];
+    if (itemRow && qty > Number(itemRow.balance || 0)) {
+      toast('Warning: this exceeds current balance (' + fmtQty(itemRow.balance) + ') — saved anyway, please double-check.', 'error');
+    }
+  }
+
+  var payload = {
+    item_id: itemId,
+    movement_type: type,
+    quantity: qty,
+    project_id: document.getElementById('mf-project').value || null,
+    reference: document.getElementById('mf-reference').value.trim() || null,
+    moved_by: document.getElementById('mf-moved-by').value.trim() || null,
+    moved_at: date,
+    notes: document.getElementById('mf-notes').value.trim() || null
+  };
+  var isEdit = !!editingMovementId;
+  var p = isEdit ? updateMovement(editingMovementId, payload) : createMovement(payload);
+  p.then(function () {
+    toast(isEdit ? 'Movement updated' : 'Movement logged', 'success');
+    closeMovementForm();
+    if (currentItemId) { showStockItemDetail(currentItemId); } else { showMovements(); }
+  }).catch(function (e) { toast('Save failed: ' + e.message, 'error'); });
+}
+function deleteMovementFromForm() {
+  if (!editingMovementId) return;
+  var id = editingMovementId;
+  closeMovementForm();
+  confirmDialog('Delete this movement? This cannot be undone.', function () {
+    return deleteMovementRow(id).then(function () {
+      toast('Movement deleted', 'success');
+      if (currentItemId) { showStockItemDetail(currentItemId); } else { showMovements(); }
+    });
+  });
+}
+</script>
+</body>
+</html>
