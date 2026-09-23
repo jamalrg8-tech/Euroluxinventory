@@ -1083,7 +1083,20 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
               </div>
               <div class="field">
                 <label class="label">System reference</label>
-                <input class="input" x-model.trim="itemForm.system_ref" list="system-list" placeholder="e.g. ADS / AWS 65">
+                <select class="select" x-show="!itemSystemNew" :value="itemForm.system_ref"
+                        @change="chooseSystem($event.target.value, 'item')">
+                  <option value="">&mdash; Choose a system &mdash;</option>
+                  <template x-for="s in systemChoices(itemForm.system_ref)" :key="s">
+                    <option :value="s" x-text="s"></option>
+                  </template>
+                  <option value="__new">+ Add a new system&hellip;</option>
+                </select>
+                <div class="row" x-show="itemSystemNew" style="gap:.4rem">
+                  <input class="input" x-model.trim="itemForm.system_ref"
+                         placeholder="Name the new system, e.g. FWS 60 CW">
+                  <button type="button" class="btn btn-sm"
+                          @click="itemSystemNew=false; itemForm.system_ref=''">Cancel</button>
+                </div>
               </div>
             </div>
             <div class="field">
@@ -1263,7 +1276,20 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
               </div>
               <div class="field">
                 <label class="label">System reference</label>
-                <input class="input" x-model.trim="bomForm.system_ref" list="system-list" placeholder="ASE 36">
+                <select class="select" x-show="!bomSystemNew" :value="bomForm.system_ref"
+                        @change="chooseSystem($event.target.value, 'bom')">
+                  <option value="">&mdash; Choose a system &mdash;</option>
+                  <template x-for="s in systemChoices(bomForm.system_ref)" :key="s">
+                    <option :value="s" x-text="s"></option>
+                  </template>
+                  <option value="__new">+ Add a new system&hellip;</option>
+                </select>
+                <div class="row" x-show="bomSystemNew" style="gap:.4rem">
+                  <input class="input" x-model.trim="bomForm.system_ref"
+                         placeholder="Name the new system, e.g. FWS 60 CW">
+                  <button type="button" class="btn btn-sm"
+                          @click="bomSystemNew=false; bomForm.system_ref=''">Cancel</button>
+                </div>
               </div>
             </div>
 
@@ -1572,6 +1598,7 @@ document.addEventListener("alpine:init", () => {
     bomOpen: false, bomForm: { lines: [] }, bomSeedSystem: "",
     importOpen: false, importText: "", importsDone: {},
     ledgerShown: 300,
+    itemSystemNew: false, bomSystemNew: false,
 
     wizard: { bomId: "", units: 1, projectId: "" },
 
@@ -1653,6 +1680,24 @@ document.addEventListener("alpine:init", () => {
        makes the page crawl on a phone, so show a page at a time and let the
        search box and the type filter do the narrowing. */
     get visibleMovements() { return this.filteredMovements.slice(0, this.ledgerShown); },
+
+    /* The dropdown's options. Always includes whatever the record already
+       carries, so editing an old BOM cannot silently blank its system. */
+    systemChoices(current) {
+      const list = this.systemOptions.slice();
+      if (current && !list.some((s) => key(s) === key(current))) list.unshift(current);
+      return list;
+    },
+    chooseSystem(value, which) {
+      const isNew = value === "__new";
+      if (which === "bom") {
+        this.bomSystemNew = isNew;
+        this.bomForm.system_ref = isNew ? "" : value;
+      } else {
+        this.itemSystemNew = isNew;
+        this.itemForm.system_ref = isNew ? "" : value;
+      }
+    },
 
     get totals() { return this.sumOf(this.inventory); },
     get filteredTotals() { return this.sumOf(this.filteredInventory); },
@@ -2026,6 +2071,7 @@ document.addEventListener("alpine:init", () => {
         ? { ...item }
         : { article_ref: "", system_ref: "", description: "", unit: "bars",
             location: "", min_qty: 0, received_qty: 0 };
+      this.itemSystemNew = false;
       this.itemOpen = true;
     },
 
@@ -2186,6 +2232,7 @@ document.addEventListener("alpine:init", () => {
       this.bomForm = b
         ? { ...b, lines: (b.lines || []).map((l) => ({ ...l })) }
         : { name: "", system_ref: "", lines: [{ article_ref: "", description: "", qty_per: 1 }] };
+      this.bomSystemNew = false;
       this.bomOpen = true;
     },
     addBomLine() { this.bomForm.lines.push({ article_ref: "", description: "", qty_per: 1 }); },

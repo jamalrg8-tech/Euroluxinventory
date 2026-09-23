@@ -249,7 +249,9 @@ for curtain wall, and `ASE 80 L & S + CW` is imported as
 `ASE 80 Lift & Slide + CW` — a combined lift & slide plus curtain wall, kept as
 a system of its own rather than folded into `ASE 80 Lift & Slide`.
 
-**System references offered when you type one** are every system that carries
+**System references** are picked from a dropdown on both the BOM template form
+and the stock profile form, with "+ Add a new system..." at the bottom for one
+that is not on the list yet. The dropdown shows every system that carries
 stock, plus the list in `knownSystems` in `firebase-config.js`. That is how a
 BOM template can name a system before any stock carries it — edit the array and
 redeploy to add more. The "Seed from a system group" picker and the stock filter
