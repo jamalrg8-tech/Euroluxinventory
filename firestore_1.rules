@@ -1,0 +1,117 @@
+rules_version = '2';
+
+// =============================================================================
+// Eurolux Inventory - Firestore Security Rules
+// =============================================================================
+// Paste these into: Firebase console -> Firestore Database -> Rules -> Publish
+//
+// MODEL A (active below) - every signed-in user may read and write the shared
+// data. Suitable when everyone with an account is trusted staff. Access is
+// controlled by who you allow to create an account (Authentication -> Users,
+// and disabling public sign-up once your team is enrolled).
+//
+// MODEL B (commented out at the bottom) - role-based. Users get a role in
+// users/{uid}.role of "admin", "storekeeper" or "viewer". Use it if you want
+// read-only accounts, e.g. for site supervisors.
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // --- Shared operational data -------------------------------------------
+    match /inventory/{docId} {
+      allow read, write: if signedIn();
+    }
+
+    match /projects/{docId} {
+      allow read, write: if signedIn();
+    }
+
+    match /boms/{docId} {
+      allow read, write: if signedIn();
+    }
+
+    // Shared app settings (default reorder threshold).
+    match /settings/{docId} {
+      allow read, write: if signedIn();
+    }
+
+    // Movements are an audit trail: create and read freely, never rewrite.
+    match /movements/{docId} {
+      allow read:   if signedIn();
+      allow create: if signedIn()
+                    && request.resource.data.qty is number
+                    && request.resource.data.qty > 0
+                    && request.resource.data.type in ['receive', 'issue', 'adjust'];
+      allow update, delete: if false;
+    }
+
+    // --- User profiles ------------------------------------------------------
+    match /users/{uid} {
+      allow read:  if signedIn();
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Deny anything not matched above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+// =============================================================================
+// MODEL B - role-based rules. To use these, delete the block above and
+// uncomment this one, then set a "role" field on each users/{uid} document.
+// The first admin must be set by hand in the Firestore console.
+// =============================================================================
+//
+// service cloud.firestore {
+//   match /databases/{database}/documents {
+//
+//     function role() {
+//       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+//     }
+//     function signedIn()   { return request.auth != null; }
+//     function canWrite()   { return signedIn() && role() in ['admin', 'storekeeper']; }
+//     function isAdmin()    { return signedIn() && role() == 'admin'; }
+//
+//     match /inventory/{docId} {
+//       allow read:  if signedIn();
+//       allow write: if canWrite();
+//     }
+//     match /projects/{docId} {
+//       allow read:  if signedIn();
+//       allow write: if canWrite();
+//     }
+//     match /boms/{docId} {
+//       allow read:  if signedIn();
+//       allow write: if isAdmin();
+//     }
+//     match /settings/{docId} {
+//       allow read:  if signedIn();
+//       allow write: if isAdmin();
+//     }
+//     match /movements/{docId} {
+//       allow read:   if signedIn();
+//       allow create: if canWrite();
+//       allow update, delete: if false;
+//     }
+//     match /users/{uid} {
+//       allow read:   if signedIn();
+//       // A user may create and maintain their own profile, but never set or
+//       // change their own role. Admins may change anything.
+//       allow create: if isAdmin()
+//                     || (request.auth.uid == uid
+//                         && !request.resource.data.keys().hasAny(['role']));
+//       allow update: if isAdmin()
+//                     || (request.auth.uid == uid
+//                         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']));
+//       allow delete: if isAdmin();
+//     }
+//     match /{document=**} { allow read, write: if false; }
+//   }
+// }

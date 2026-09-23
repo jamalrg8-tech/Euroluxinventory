@@ -1,0 +1,2317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Eurolux Inventory &amp; Stock Control</title>
+<meta name="description" content="Aluminium profile inventory, BOM allocation and stock control for Eurolux fabrication.">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0284c7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Eurolux">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+/* ===========================================================================
+   Design tokens
+   =========================================================================== */
+:root{
+  --bg:#0f172a; --bg-2:#0b1220; --panel:#111c30; --panel-2:#16233b;
+  --line:#1e2f4a; --line-soft:#1a2942;
+  --text:#e8eef7; --muted:#93a4bd; --faint:#64748b;
+  --accent:#38bdf8; --accent-solid:#0284c7; --accent-dim:rgba(56,189,248,.12);
+  --good:#34d399; --warn:#fbbf24; --bad:#f87171; --violet:#a78bfa;
+  --radius:14px; --radius-sm:10px;
+  --shadow:0 10px 30px rgba(0,0,0,.35);
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--text); font-family:var(--sans);
+  font-size:15px; line-height:1.45; -webkit-font-smoothing:antialiased;
+  overscroll-behavior-y:none;
+}
+[x-cloak]{display:none!important}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#274060;border-radius:6px}
+::-webkit-scrollbar-thumb:hover{background:#33547c}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:none}
+a{color:var(--accent)}
+h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em}
+
+/* ===========================================================================
+   Primitives
+   =========================================================================== */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:.5rem;
+  padding:.6rem 1rem;border-radius:var(--radius-sm);font-size:.875rem;font-weight:600;
+  border:1px solid var(--line);background:var(--panel-2);color:var(--text);
+  transition:background .15s,border-color .15s,opacity .15s;white-space:nowrap;
+}
+.btn:hover{background:#1c2c48;border-color:#2b4368}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn:disabled:hover{background:var(--panel-2);border-color:var(--line)}
+.btn-primary{background:var(--accent-solid);border-color:var(--accent-solid);color:#fff}
+.btn-primary:hover{background:#0369a1;border-color:#0369a1}
+.btn-primary:disabled:hover{background:var(--accent-solid);border-color:var(--accent-solid)}
+.btn-ghost{background:transparent;border-color:transparent;color:var(--muted)}
+.btn-ghost:hover{background:var(--panel-2);color:var(--text);border-color:transparent}
+.btn-danger{background:rgba(248,113,113,.12);border-color:rgba(248,113,113,.35);color:#fca5a5}
+.btn-danger:hover{background:rgba(248,113,113,.2);border-color:rgba(248,113,113,.5)}
+.btn-sm{padding:.35rem .6rem;font-size:.78rem;border-radius:8px}
+.btn-block{width:100%}
+
+.field{display:flex;flex-direction:column;gap:.35rem;min-width:0}
+.label{font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.input,.select,.textarea{
+  width:100%;background:var(--bg-2);border:1px solid var(--line);
+  border-radius:var(--radius-sm);padding:.6rem .75rem;font-size:.9rem;
+  transition:border-color .15s,box-shadow .15s;
+}
+.input:focus,.select:focus,.textarea:focus{
+  outline:none;border-color:var(--accent-solid);box-shadow:0 0 0 3px var(--accent-dim);
+}
+.input::placeholder{color:var(--faint)}
+.select{appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='none' stroke='%2393a4bd' stroke-width='1.6' d='M1 1.5l5 5 5-5'/></svg>");
+  background-repeat:no-repeat;background-position:right .7rem center;padding-right:2rem}
+.textarea{resize:vertical;min-height:72px}
+.hint{font-size:.75rem;color:var(--faint)}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
+.card-pad{padding:1.1rem 1.25rem}
+
+.pill{display:inline-flex;align-items:center;gap:.35rem;padding:.2rem .55rem;border-radius:999px;
+  font-size:.7rem;font-weight:700;letter-spacing:.03em;border:1px solid transparent;white-space:nowrap}
+.pill-good{background:rgba(52,211,153,.12);color:var(--good);border-color:rgba(52,211,153,.25)}
+.pill-warn{background:rgba(251,191,36,.12);color:var(--warn);border-color:rgba(251,191,36,.28)}
+.pill-bad{background:rgba(248,113,113,.12);color:var(--bad);border-color:rgba(248,113,113,.28)}
+.pill-info{background:var(--accent-dim);color:var(--accent);border-color:rgba(56,189,248,.25)}
+.pill-mute{background:var(--panel-2);color:var(--muted);border-color:var(--line)}
+.dot{width:7px;height:7px;border-radius:999px;background:currentColor;flex:none}
+
+.mono{font-family:var(--mono)}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.faint{color:var(--faint)}
+.right{text-align:right}
+.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ===========================================================================
+   Shell
+   =========================================================================== */
+.shell{display:flex;height:100dvh;overflow:hidden}
+.sidebar{
+  width:264px;flex:none;background:var(--bg-2);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;justify-content:space-between;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.brand{display:flex;align-items:center;gap:.7rem;padding:1rem 1.1rem;border-bottom:1px solid var(--line)}
+.brand-mark{
+  background:linear-gradient(135deg,#0284c7,#0ea5e9);color:#fff;font-weight:800;
+  font-size:.7rem;letter-spacing:.12em;padding:.5rem .55rem;border-radius:10px;flex:none
+}
+.brand-name{font-size:.8rem;font-weight:700;line-height:1.15;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.brand-sub{font-size:.62rem;letter-spacing:.12em;color:var(--faint);text-transform:uppercase;font-weight:600}
+.nav{padding:.75rem;display:flex;flex-direction:column;gap:.15rem}
+.nav-item{
+  display:flex;align-items:center;gap:.7rem;width:100%;text-align:left;
+  padding:.65rem .8rem;border-radius:var(--radius-sm);font-size:.875rem;font-weight:550;
+  color:var(--muted);transition:background .15s,color .15s
+}
+.nav-item:hover{background:var(--panel);color:var(--text)}
+.nav-item.active{background:var(--accent-dim);color:var(--accent);box-shadow:inset 2px 0 0 var(--accent-solid)}
+.nav-item .ico{width:18px;height:18px;flex:none}
+.nav-badge{margin-left:auto;font-size:.68rem;font-weight:700;padding:.05rem .4rem;border-radius:999px;
+  background:rgba(248,113,113,.15);color:var(--bad)}
+.side-foot{padding:.9rem 1rem;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:.6rem}
+.who{display:flex;align-items:center;gap:.6rem;min-width:0}
+.avatar{width:30px;height:30px;border-radius:999px;background:var(--accent-solid);color:#fff;
+  display:grid;place-items:center;font-size:.72rem;font-weight:700;flex:none}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+.topbar{
+  height:60px;flex:none;border-bottom:1px solid var(--line);background:rgba(11,18,32,.6);
+  backdrop-filter:blur(8px);display:flex;align-items:center;gap:.75rem;padding:0 1.25rem
+}
+.search{position:relative;flex:1;max-width:460px}
+.search .input{padding-left:2.2rem}
+.search svg{position:absolute;left:.7rem;top:50%;transform:translateY(-50%);color:var(--faint)}
+.view{flex:1;overflow-y:auto;padding:1.5rem;-webkit-overflow-scrolling:touch}
+.view-head{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin-bottom:1.1rem;flex-wrap:wrap}
+.view-title{font-size:1.15rem;font-weight:700}
+.view-sub{font-size:.82rem;color:var(--muted);margin-top:.15rem}
+.actions{display:flex;gap:.5rem;flex-wrap:wrap}
+.menu-btn{display:none}
+
+/* ===========================================================================
+   Data display
+   =========================================================================== */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:1.1rem 1.2rem}
+.kpi-label{font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.kpi-value{font-size:1.9rem;font-weight:700;margin-top:.4rem;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.kpi-foot{font-size:.74rem;color:var(--faint);margin-top:.3rem}
+
+.table-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--line);background:var(--panel)}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+thead th{
+  position:sticky;top:0;z-index:1;background:var(--panel-2);color:var(--muted);
+  font-size:.68rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+  padding:.7rem .7rem;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap
+}
+tbody td{padding:.7rem .7rem;border-bottom:1px solid var(--line-soft);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:rgba(56,189,248,.04)}
+tbody tr.row-bad{background:rgba(248,113,113,.05)}
+tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--panel-2);font-weight:700}
+.cell-actions{display:flex;gap:.3rem;justify-content:flex-end}
+
+.empty{padding:3rem 1.5rem;text-align:center;color:var(--faint)}
+.empty-title{color:var(--muted);font-weight:600;margin-bottom:.3rem}
+
+/* ===========================================================================
+   Modals / toasts / auth
+   =========================================================================== */
+.backdrop{
+  position:fixed;inset:0;z-index:60;background:rgba(6,11,22,.72);backdrop-filter:blur(4px);
+  display:flex;align-items:center;justify-content:center;padding:1rem
+}
+.modal{
+  width:100%;max-width:640px;max-height:88dvh;overflow-y:auto;background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)
+}
+.modal-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;
+  padding:1rem 1.25rem;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
+.modal-body{padding:1.25rem;display:flex;flex-direction:column;gap:1rem}
+.modal-foot{padding:1rem 1.25rem;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:.6rem;
+  position:sticky;bottom:0;background:var(--panel)}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem}
+
+.toasts{position:fixed;z-index:80;right:1rem;bottom:1rem;display:flex;flex-direction:column;gap:.5rem;max-width:min(92vw,380px)}
+.toast{background:var(--panel-2);border:1px solid var(--line);border-left-width:3px;border-radius:var(--radius-sm);
+  padding:.7rem .9rem;font-size:.85rem;box-shadow:var(--shadow)}
+.toast.ok{border-left-color:var(--good)}
+.toast.err{border-left-color:var(--bad)}
+.toast.info{border-left-color:var(--accent)}
+
+.auth-screen{min-height:100dvh;display:grid;place-items:center;padding:1.25rem;
+  background:radial-gradient(1000px 600px at 50% -10%,rgba(2,132,199,.18),transparent 60%),var(--bg)}
+.auth-card{width:100%;max-width:410px}
+.auth-logo{display:flex;flex-direction:column;align-items:center;gap:.6rem;margin-bottom:1.5rem;text-align:center}
+.seg{display:flex;background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:3px;gap:3px}
+.seg button{flex:1;padding:.45rem;border-radius:8px;font-size:.82rem;font-weight:600;color:var(--muted)}
+.seg button.on{background:var(--panel-2);color:var(--text)}
+
+.banner{display:flex;gap:.7rem;align-items:flex-start;padding:.8rem .95rem;border-radius:var(--radius-sm);
+  font-size:.83rem;border:1px solid;line-height:1.5}
+.banner-warn{background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.3);color:#fcd34d}
+.banner-bad{background:rgba(248,113,113,.08);border-color:rgba(248,113,113,.3);color:#fca5a5}
+.banner-info{background:var(--accent-dim);border-color:rgba(56,189,248,.28);color:#7dd3fc}
+
+.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;
+  border-radius:999px;animation:spin .7s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.boot{min-height:100dvh;display:grid;place-items:center;color:var(--muted);gap:.8rem;padding:1.5rem}
+
+.bom-line{display:grid;grid-template-columns:1.1fr 1.6fr .6fr auto;gap:.6rem;align-items:end}
+.stack{display:flex;flex-direction:column;gap:1rem}
+.row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+
+/* Stock cards — the phone view of the master stock table. */
+.stock-cards{display:none}
+.stock-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:.9rem 1rem}
+.stock-card.short{border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.04)}
+.stock-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem}
+.stock-figs{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin:.75rem 0;
+  padding:.6rem 0;border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)}
+.stock-fig-label{font-size:.6rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
+.stock-fig-value{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:1.05rem;font-weight:700;margin-top:.1rem}
+
+/* ===========================================================================
+   Responsive
+   =========================================================================== */
+@media (max-width:900px){
+  .grid-3{grid-template-columns:1fr 1fr}
+  .bom-line{grid-template-columns:1fr 1fr}
+}
+@media (max-width:760px){
+  .sidebar{
+    position:fixed;inset:0 auto 0 0;z-index:70;transform:translateX(-100%);
+    transition:transform .22s ease;box-shadow:var(--shadow)
+  }
+  .sidebar.open{transform:none}
+  .menu-btn{display:inline-flex}
+  .view{padding:1rem;padding-bottom:calc(1rem + env(safe-area-inset-bottom))}
+  .topbar{padding:0 .85rem;gap:.5rem}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .kpi-value{font-size:1.6rem}
+  .toasts{left:1rem;right:1rem;max-width:none}
+  .scrim{position:fixed;inset:0;z-index:65;background:rgba(6,11,22,.6)}
+  /* Master stock becomes cards — no horizontal scrolling on the shop floor. */
+  .stock-table{display:none}
+  .stock-cards{display:flex;flex-direction:column;gap:.75rem}
+  /* Give the search box the room instead of spelling out "shortages". */
+  .pill-word{display:none}
+}
+</style>
+</head>
+
+<body>
+
+<!-- =========================================================================
+     BOOT GUARD
+     ========================================================================= -->
+<div id="boot" class="boot">
+  <div class="spinner" style="border-top-color:var(--accent)"></div>
+  <div id="boot-msg">Starting Eurolux Inventory…</div>
+</div>
+<script>
+  // If the app has not booted within 12s the CDN scripts were almost certainly
+  // blocked or unreachable. Say so rather than spinning forever.
+  setTimeout(function () {
+    var msg = document.getElementById("boot-msg");
+    if (!msg) return;
+    msg.innerHTML =
+      '<div style="max-width:430px;text-align:center;line-height:1.55">' +
+      "<strong>The app could not start.</strong><br>" +
+      "The Alpine.js or Firebase scripts were blocked. Check your internet " +
+      "connection and reload. On a corporate network, allow " +
+      '<span style="font-family:monospace">cdn.jsdelivr.net</span> and ' +
+      '<span style="font-family:monospace">www.gstatic.com</span>.</div>';
+  }, 12000);
+</script>
+
+<div id="app" x-data="euroluxApp" x-init="initApp()" x-cloak style="display:none">
+
+  <!-- ===================== CONFIG NOT SET ===================== -->
+  <template x-if="configMissing">
+    <div class="auth-screen">
+      <div class="auth-card card card-pad stack">
+        <h2 class="view-title">Firebase is not configured yet</h2>
+        <p class="muted" style="font-size:.88rem">
+          Open <span class="mono">firebase-config.js</span> in your repository and replace the
+          placeholder values with the config object from your Firebase project
+          (Project settings → General → Your apps → Web app → Config).
+        </p>
+        <div class="banner banner-info">Full setup steps are in <span class="mono">README.md</span>.</div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ===================== SIGN IN ===================== -->
+  <template x-if="!configMissing && !authUser && authReady">
+    <div class="auth-screen">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <div class="brand-mark" style="font-size:.85rem;padding:.7rem .8rem">EUROLUX</div>
+          <div>
+            <div style="font-weight:700;font-size:1.05rem">Inventory &amp; Stock Control</div>
+            <div class="faint" style="font-size:.78rem">Aluminium profile operations</div>
+          </div>
+        </div>
+
+        <div class="card card-pad stack">
+          <div class="seg">
+            <button :class="authMode==='signin' && 'on'" @click="authMode='signin';authError=''">Sign in</button>
+            <button :class="authMode==='signup' && 'on'" @click="authMode='signup';authError=''">Create account</button>
+          </div>
+
+          <form @submit.prevent="submitAuth()" class="stack">
+            <div class="field" x-show="authMode==='signup'">
+              <label class="label">Full name</label>
+              <input class="input" type="text" x-model="authName" placeholder="e.g. Steve Mathew" autocomplete="name">
+            </div>
+            <div class="field">
+              <label class="label">Work email</label>
+              <input class="input" type="email" x-model="authEmail" required placeholder="you@eurolux.ae" autocomplete="username">
+            </div>
+            <div class="field">
+              <label class="label">Password</label>
+              <input class="input" type="password" x-model="authPassword" required minlength="6"
+                     placeholder="At least 6 characters" :autocomplete="authMode==='signup'?'new-password':'current-password'">
+            </div>
+
+            <template x-if="authError">
+              <div class="banner banner-bad" x-text="authError"></div>
+            </template>
+
+            <button class="btn btn-primary btn-block" type="submit" :disabled="authBusy">
+              <span x-show="authBusy" class="spinner"></span>
+              <span x-text="authMode==='signin' ? 'Sign in' : 'Create account'"></span>
+            </button>
+          </form>
+
+          <p class="hint">
+            Everyone who signs in shares the same live database. A receipt or issue
+            posted on one device appears on every other device within a second.
+          </p>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ===================== MAIN APP ===================== -->
+  <template x-if="!configMissing && authUser">
+  <div class="shell">
+
+    <div class="scrim" x-show="menuOpen" @click="menuOpen=false" x-cloak></div>
+    <aside class="sidebar" :class="menuOpen && 'open'">
+      <div>
+        <div class="brand">
+          <div class="brand-mark">EUROLUX</div>
+          <div style="min-width:0">
+            <div class="brand-name">Inventory Control</div>
+            <div class="brand-sub">Stock &amp; BOM</div>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <template x-for="t in tabs" :key="t.id">
+            <button class="nav-item" :class="currentTab===t.id && 'active'" @click="go(t.id)">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                   stroke-linecap="round" stroke-linejoin="round" x-html="t.icon"></svg>
+              <span x-text="t.label"></span>
+              <template x-if="t.id==='inventory' && shortageCount>0">
+                <span class="nav-badge" x-text="shortageCount"></span>
+              </template>
+            </button>
+          </template>
+        </nav>
+      </div>
+
+      <div class="side-foot">
+        <div class="row" style="justify-content:space-between;font-size:.74rem">
+          <span class="muted">Saved on device</span>
+          <span class="pill" :class="syncClass">
+            <span class="dot"></span>
+            <span x-text="syncLabel"></span>
+          </span>
+        </div>
+        <div class="who">
+          <div class="avatar" x-text="initials"></div>
+          <div style="min-width:0">
+            <div class="truncate" style="font-size:.8rem;font-weight:600" x-text="displayName"></div>
+            <div class="truncate faint" style="font-size:.7rem" x-text="authUser?.email"></div>
+          </div>
+        </div>
+        <button class="btn btn-sm btn-ghost" @click="doSignOut()">Sign out</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="btn btn-sm btn-ghost menu-btn" @click="menuOpen=!menuOpen" aria-label="Menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        </button>
+
+        <div class="search">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input class="input" type="search" x-model="searchQuery"
+                 placeholder="Search article code, description or system…">
+        </div>
+
+        <div style="flex:1"></div>
+
+        <span class="pill" :class="shortageCount ? 'pill-warn' : 'pill-good'" title="Articles at or below their reorder level">
+          <span x-text="shortageCount"></span>
+          <span class="pill-word" x-text="shortageCount===1 ? 'shortage' : 'shortages'"></span>
+        </span>
+      </header>
+
+      <div class="view">
+
+        <template x-if="pendingWrites > 0">
+          <div class="banner banner-info" style="margin-bottom:1.1rem">
+            <div>
+              <strong x-text="pendingWrites + (pendingWrites === 1 ? ' change saved on this device' : ' changes saved on this device')"></strong><span
+                x-show="!online">, waiting for a connection. Keep working — everything is stored
+                here and will send itself the moment you are back online.</span><span
+                x-show="online">, sending now…</span>
+            </div>
+          </div>
+        </template>
+
+
+        <!-- ============ DASHBOARD ============ -->
+        <div id="view-dashboard" x-show="currentTab==='dashboard'" class="stack">
+          <div class="view-head">
+            <div>
+              <h2 class="view-title">Main Dashboard Center</h2>
+              <p class="view-sub">Live position across all systems and villa projects.</p>
+            </div>
+            <div class="actions">
+              <button class="btn btn-sm" @click="go('wizard')">BOM wizard</button>
+              <button class="btn btn-sm btn-primary" @click="openItem()">Add profile</button>
+            </div>
+          </div>
+
+          <div class="kpis">
+            <div class="kpi">
+              <div class="kpi-label">Total Profile Varieties</div>
+              <div class="kpi-value" x-text="fmt(inventory.length)"></div>
+              <div class="kpi-foot" x-text="`${systems.length} systems · ${projects.length} projects`"></div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">Total Received</div>
+              <div class="kpi-value" style="color:var(--accent)" x-text="fmt(totals.received)"></div>
+              <div class="kpi-foot">bars / packets booked in</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">Issued to Cutters</div>
+              <div class="kpi-value" style="color:var(--violet)" x-text="fmt(totals.issued)"></div>
+              <div class="kpi-foot">consumed by production</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">Net Warehoused Balance</div>
+              <div class="kpi-value" style="color:var(--good)" x-text="fmt(totals.balance)"></div>
+              <div class="kpi-foot">physically on hand</div>
+            </div>
+          </div>
+
+          <template x-if="!inventory.length">
+            <div class="card empty">
+              <div class="empty-title">No stock loaded yet</div>
+              <div style="margin-bottom:1rem">
+                Import your article list as CSV, add profiles one at a time, or load the
+                sample Schüco data to try the app.
+              </div>
+              <div class="row" style="justify-content:center">
+                <button class="btn btn-primary" @click="go('inventory')">Go to Master Stock</button>
+                <button class="btn" @click="seedSample()" :disabled="saving">Load sample data</button>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="shortageItems.length">
+            <div class="card">
+              <div class="card-pad" style="border-bottom:1px solid var(--line)">
+                <h3 style="font-size:.95rem">Critical shortages detected</h3>
+                <p class="view-sub" x-text="`Balance at or below the reorder level (default threshold ${fmt(settings.shortageThreshold)}).`"></p>
+              </div>
+              <div class="table-wrap" style="border:none;border-radius:0">
+                <table>
+                  <thead><tr>
+                    <th>System</th><th>Article</th><th>Description</th>
+                    <th class="right">Balance</th><th class="right">Reorder at</th><th class="right">Short by</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="item in shortageItems.slice(0,12)" :key="item.id">
+                      <tr class="row-bad">
+                        <td class="muted" x-text="item.system_ref || '—'"></td>
+                        <td class="mono" style="color:var(--accent);font-weight:700" x-text="item.article_ref"></td>
+                        <td x-text="item.description"></td>
+                        <td class="right num" x-text="fmt(balanceOf(item))"></td>
+                        <td class="right num muted" x-text="fmt(reorderLevel(item))"></td>
+                        <td class="right num" style="color:var(--bad);font-weight:700"
+                            x-text="fmt(Math.max(0, reorderLevel(item) - balanceOf(item)))"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="systemSummary.length">
+            <div class="card">
+              <div class="card-pad" style="border-bottom:1px solid var(--line)">
+                <h3 style="font-size:.95rem">Position by system</h3>
+              </div>
+              <div class="table-wrap" style="border:none;border-radius:0">
+                <table>
+                  <thead><tr>
+                    <th>System reference</th><th class="right">Articles</th>
+                    <th class="right">Received</th><th class="right">Issued</th>
+                    <th class="right">Balance</th><th class="right">Short</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="s in systemSummary" :key="s.name">
+                      <tr>
+                        <td style="font-weight:600" x-text="s.name"></td>
+                        <td class="right num muted" x-text="fmt(s.count)"></td>
+                        <td class="right num" style="color:var(--good)" x-text="fmt(s.received)"></td>
+                        <td class="right num" style="color:var(--violet)" x-text="fmt(s.issued)"></td>
+                        <td class="right num" style="font-weight:700" x-text="fmt(s.balance)"></td>
+                        <td class="right">
+                          <span class="pill" :class="s.short ? 'pill-warn' : 'pill-good'" x-text="fmt(s.short)"></span>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </template>
+
+          <div class="card">
+            <div class="card-pad" style="border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:1rem">
+              <div>
+                <h3 style="font-size:.95rem">Recent stock movements</h3>
+                <p class="view-sub">Last 12 transactions across all users.</p>
+              </div>
+              <button class="btn btn-sm btn-ghost" @click="go('movements')">View all</button>
+            </div>
+            <template x-if="!movements.length">
+              <div class="empty">
+                <div class="empty-title">No movements recorded yet</div>
+                <div>Receive stock against a profile to start the audit trail.</div>
+              </div>
+            </template>
+            <template x-if="movements.length">
+              <div class="table-wrap" style="border:none;border-radius:0">
+                <table>
+                  <thead><tr>
+                    <th>When</th><th>Type</th><th>Article</th><th class="right">Qty</th><th>Project</th><th>By</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="m in movements.slice(0,12)" :key="m.id">
+                      <tr>
+                        <td class="faint" style="white-space:nowrap" x-text="when(m.at)"></td>
+                        <td><span class="pill" :class="moveClass(m.type)" x-text="m.type"></span></td>
+                        <td class="mono" style="color:var(--accent)" x-text="m.article_ref"></td>
+                        <td class="right num" x-text="(m.type==='issue'?'−':'+')+fmt(m.qty)"></td>
+                        <td class="muted truncate" x-text="m.project_code || '—'"></td>
+                        <td class="faint truncate" x-text="m.by_name || '—'"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- ============ INVENTORY ============ -->
+        <div id="view-inventory" x-show="currentTab==='inventory'" class="stack">
+          <div class="view-head">
+            <div>
+              <h2 class="view-title">Master Stock Control</h2>
+              <p class="view-sub" x-text="`${filteredInventory.length} of ${inventory.length} profiles shown`"></p>
+            </div>
+            <div class="actions">
+              <select class="select" style="width:auto;min-width:170px" x-model="selectedCategory">
+                <option value="ALL SYSTEMS">ALL SYSTEMS</option>
+                <template x-for="s in systems" :key="s">
+                  <option :value="s" x-text="s"></option>
+                </template>
+              </select>
+              <button class="btn btn-sm" @click="exportCsv()" :disabled="!inventory.length">Export CSV</button>
+              <button class="btn btn-sm" @click="importOpen=true">Import CSV</button>
+              <button class="btn btn-sm btn-primary" @click="openItem()">Add profile</button>
+            </div>
+          </div>
+
+          <template x-if="!inventory.length">
+            <div class="card empty">
+              <div class="empty-title">Your stock list is empty</div>
+              <div style="margin-bottom:1rem">
+                Import your existing article list as CSV, add profiles one at a time,
+                or load the sample Schüco data to see how it works.
+              </div>
+              <div class="row" style="justify-content:center">
+                <button class="btn btn-primary" @click="openItem()">Add first profile</button>
+                <button class="btn" @click="importOpen=true">Import CSV</button>
+                <button class="btn" @click="seedSample()" :disabled="saving">Load sample data</button>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="inventory.length">
+            <div class="stock-cards">
+              <template x-for="item in filteredInventory" :key="item.id">
+                <div class="stock-card" :class="isShort(item) && 'short'">
+                  <div class="stock-card-top">
+                    <div style="min-width:0">
+                      <div class="mono" style="color:var(--accent);font-weight:700;font-size:.95rem"
+                           x-text="item.article_ref"></div>
+                      <div style="font-size:.85rem;margin-top:.15rem" x-text="item.description"></div>
+                      <div class="faint" style="font-size:.72rem;margin-top:.2rem"
+                           x-text="[item.system_ref, item.location, item.unit].filter(Boolean).join(' · ')"></div>
+                    </div>
+                    <span class="pill" :class="statusClass(item)" x-text="statusLabel(item)"></span>
+                  </div>
+
+                  <div class="stock-figs">
+                    <div>
+                      <div class="stock-fig-label">Received</div>
+                      <div class="stock-fig-value" style="color:var(--good)" x-text="fmt(item.received_qty)"></div>
+                    </div>
+                    <div>
+                      <div class="stock-fig-label">Issued</div>
+                      <div class="stock-fig-value" style="color:var(--violet)" x-text="fmt(item.issued_qty)"></div>
+                    </div>
+                    <div>
+                      <div class="stock-fig-label">Balance</div>
+                      <div class="stock-fig-value"
+                           :style="{ color: balanceOf(item) < 0 ? 'var(--bad)' : '' }"
+                           x-text="fmt(balanceOf(item))"></div>
+                    </div>
+                  </div>
+
+                  <div class="row" style="gap:.4rem">
+                    <button class="btn btn-sm" style="flex:1" @click="openMove(item,'receive')">Receive</button>
+                    <button class="btn btn-sm" style="flex:1" @click="openMove(item,'issue')">Issue</button>
+                    <button class="btn btn-sm btn-ghost" @click="openItem(item)">Edit</button>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <template x-if="inventory.length">
+            <div class="table-wrap stock-table">
+              <table>
+                <thead><tr>
+                  <th>System</th>
+                  <th>Article</th>
+                  <th style="width:40%">Description</th>
+                  <th class="right">Received</th>
+                  <th class="right">Issued</th>
+                  <th class="right">Balance</th>
+                  <th>Status</th>
+                  <th class="right"><span class="faint">Actions</span></th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="item in filteredInventory" :key="item.id">
+                    <tr :class="isShort(item) && 'row-bad'">
+                      <td class="muted" style="white-space:nowrap" x-text="item.system_ref || '—'"></td>
+                      <td class="mono" style="color:var(--accent);font-weight:700" x-text="item.article_ref"></td>
+                      <td>
+                        <div x-text="item.description"></div>
+                        <div class="faint" style="font-size:.72rem"
+                             x-text="[item.location, item.unit].filter(Boolean).join(' · ')"></div>
+                      </td>
+                      <td class="right num" style="color:var(--good)" x-text="fmt(item.received_qty)"></td>
+                      <td class="right num" style="color:var(--violet)" x-text="fmt(item.issued_qty)"></td>
+                      <td class="right num"
+                          :style="{ fontWeight: 700, color: balanceOf(item) < 0 ? 'var(--bad)' : '' }"
+                          x-text="fmt(balanceOf(item))"></td>
+                      <td><span class="pill" :class="statusClass(item)" x-text="statusLabel(item)"></span></td>
+                      <td>
+                        <div class="cell-actions">
+                          <button class="btn btn-sm" @click="openMove(item,'receive')">Receive</button>
+                          <button class="btn btn-sm" @click="openMove(item,'issue')">Issue</button>
+                          <button class="btn btn-sm btn-ghost" @click="openItem(item)">Edit</button>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colspan="3" class="muted" style="font-weight:600">Totals (filtered)</td>
+                    <td class="right num" x-text="fmt(filteredTotals.received)"></td>
+                    <td class="right num" x-text="fmt(filteredTotals.issued)"></td>
+                    <td class="right num" x-text="fmt(filteredTotals.balance)"></td>
+                    <td colspan="2"></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </template>
+        </div>
+
+        <!-- ============ MOVEMENTS ============ -->
+        <div id="view-movements" x-show="currentTab==='movements'" class="stack">
+          <div class="view-head">
+            <div>
+              <h2 class="view-title">Movement Ledger</h2>
+              <p class="view-sub">Every receipt, issue and adjustment, newest first. Rows cannot be edited or deleted.</p>
+            </div>
+            <div class="actions">
+              <select class="select" style="width:auto" x-model="moveFilter">
+                <option value="">All types</option>
+                <option value="receive">Receipts</option>
+                <option value="issue">Issues</option>
+                <option value="adjust">Adjustments</option>
+              </select>
+            </div>
+          </div>
+
+          <template x-if="!filteredMovements.length">
+            <div class="card empty"><div class="empty-title">Nothing to show</div>
+              <div>Movements appear here as soon as stock is received or issued.</div></div>
+          </template>
+
+          <template x-if="filteredMovements.length">
+            <div class="table-wrap">
+              <table>
+                <thead><tr>
+                  <th>When</th><th>Type</th><th>Article</th><th>Description</th>
+                  <th class="right">Qty</th><th>Project</th><th>Note</th><th>By</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="m in filteredMovements" :key="m.id">
+                    <tr>
+                      <td class="faint" style="white-space:nowrap" x-text="when(m.at)"></td>
+                      <td><span class="pill" :class="moveClass(m.type)" x-text="m.type"></span></td>
+                      <td class="mono" style="color:var(--accent)" x-text="m.article_ref"></td>
+                      <td class="muted truncate" style="max-width:240px" x-text="m.description || '—'"></td>
+                      <td class="right num" x-text="(m.type==='issue'?'−':'+')+fmt(m.qty)"></td>
+                      <td class="muted" x-text="m.project_code || '—'"></td>
+                      <td class="faint truncate" style="max-width:200px" x-text="m.note || '—'"></td>
+                      <td class="faint truncate" x-text="m.by_name || '—'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </div>
+
+        <!-- ============ BOM WIZARD ============ -->
+        <div id="view-wizard" x-show="currentTab==='wizard'" class="stack">
+          <div class="view-head">
+            <div>
+              <h2 class="view-title">System BOM Wizard</h2>
+              <p class="view-sub">Check a package bundle against live stock, then batch-book it to a villa project.</p>
+            </div>
+            <div class="actions">
+              <button class="btn btn-sm btn-primary" @click="openBom()">New BOM template</button>
+            </div>
+          </div>
+
+          <template x-if="!boms.length">
+            <div class="card empty">
+              <div class="empty-title">No BOM templates yet</div>
+              <div style="margin-bottom:1rem;max-width:560px;margin-left:auto;margin-right:auto">
+                A template lists the profiles consumed <strong>per unit</strong> of a system —
+                ASE 36 pocket sliding door, AWS 65 window, ASE 54 PD, and so on.
+                You can seed one from an existing system group and then correct the quantities.
+              </div>
+              <button class="btn btn-primary" @click="openBom()">Create first template</button>
+            </div>
+          </template>
+
+          <template x-if="boms.length">
+            <div class="stack">
+              <div class="card card-pad">
+                <div class="grid-3">
+                  <div class="field">
+                    <label class="label">1. System fabrication variant</label>
+                    <select class="select" x-model="wizard.bomId">
+                      <option value="">— Choose system —</option>
+                      <template x-for="b in boms" :key="b.id">
+                        <option :value="b.id" x-text="b.name"></option>
+                      </template>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label class="label">2. Number of units</label>
+                    <input class="input num" type="number" min="1" step="1" x-model.number="wizard.units">
+                  </div>
+                  <div class="field">
+                    <label class="label">3. Target villa project</label>
+                    <select class="select" x-model="wizard.projectId">
+                      <option value="">— Select project destination —</option>
+                      <template x-for="p in projects" :key="p.id">
+                        <option :value="p.id" x-text="p.project_code"></option>
+                      </template>
+                    </select>
+                  </div>
+                </div>
+
+                <template x-if="selectedBom">
+                  <div class="row" style="margin-top:1rem;justify-content:space-between">
+                    <span class="hint"
+                          x-text="`${(selectedBom.lines||[]).length} lines · ${selectedBom.system_ref || 'no system reference'}`"></span>
+                    <div class="row">
+                      <button class="btn btn-sm btn-ghost" @click="openBom(selectedBom)">Edit template</button>
+                      <button class="btn btn-sm btn-primary" @click="issueBundle()"
+                              :disabled="!wizardLines.length || !wizard.projectId || issuing">
+                        <span x-show="issuing" class="spinner"></span>
+                        <span>Batch book package bundle</span>
+                      </button>
+                    </div>
+                  </div>
+                </template>
+                <template x-if="selectedBom && !wizard.projectId">
+                  <p class="hint" style="margin-top:.5rem;text-align:right">
+                    Select a project destination to enable booking.
+                  </p>
+                </template>
+              </div>
+
+              <template x-if="wizardShortage">
+                <div class="banner banner-warn">
+                  <div>
+                    <strong>Insufficient stock for this bundle.</strong><br>
+                    <span x-text="`${wizardLines.filter(l=>l.short>0||!l.known).length} of ${wizardLines.length} lines cannot be covered by the current warehouse balance. Booking anyway drives those articles negative — the ledger stays correct, but the shortfall has to be purchased.`"></span>
+                  </div>
+                </div>
+              </template>
+
+              <template x-if="wizardLines.length">
+                <div class="table-wrap">
+                  <table>
+                    <thead><tr>
+                      <th>Article</th><th>Material Description</th>
+                      <th class="right">Per unit</th><th class="right">Required count</th>
+                      <th class="right">On hand</th><th class="right">Short by</th><th>Status</th>
+                    </tr></thead>
+                    <tbody>
+                      <template x-for="l in wizardLines" :key="l.article_ref">
+                        <tr :class="(l.short>0 || !l.known) && 'row-bad'">
+                          <td class="mono" style="color:var(--accent);font-weight:700" x-text="l.article_ref"></td>
+                          <td x-text="l.description"></td>
+                          <td class="right num muted" x-text="fmt(l.qty_per)"></td>
+                          <td class="right num" style="font-weight:700" x-text="fmt(l.required)"></td>
+                          <td class="right num" x-text="l.known ? fmt(l.on_hand) : '—'"></td>
+                          <td class="right num" :style="l.short>0 ? 'color:var(--bad);font-weight:700' : 'color:var(--faint)'"
+                              x-text="fmt(l.short)"></td>
+                          <td>
+                            <span class="pill" :class="!l.known ? 'pill-bad' : (l.short>0 ? 'pill-warn' : 'pill-good')"
+                                  x-text="!l.known ? 'not in stock list' : (l.short>0 ? 'short' : 'available')"></span>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
+
+              <div class="card">
+                <div class="card-pad" style="border-bottom:1px solid var(--line)">
+                  <h3 style="font-size:.95rem">BOM templates</h3>
+                </div>
+                <div class="table-wrap" style="border:none;border-radius:0">
+                  <table>
+                    <thead><tr><th>Name</th><th>System ref</th><th class="right">Lines</th><th class="right">Actions</th></tr></thead>
+                    <tbody>
+                      <template x-for="b in boms" :key="b.id">
+                        <tr>
+                          <td style="font-weight:600" x-text="b.name"></td>
+                          <td class="mono muted" x-text="b.system_ref || '—'"></td>
+                          <td class="right num" x-text="(b.lines||[]).length"></td>
+                          <td><div class="cell-actions">
+                            <button class="btn btn-sm btn-ghost" @click="openBom(b)">Edit</button>
+                            <button class="btn btn-sm btn-danger" @click="removeBom(b)">Delete</button>
+                          </div></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- ============ PROJECTS ============ -->
+        <div id="view-projects" x-show="currentTab==='projects'" class="stack">
+          <div class="view-head">
+            <div>
+              <h2 class="view-title">Villa Project Summaries</h2>
+              <p class="view-sub">Material booked against each job, aggregated per article.</p>
+            </div>
+            <div class="actions">
+              <button class="btn btn-sm" @click="exportProjectCsv()" :disabled="!projects.length">Export bookings</button>
+              <button class="btn btn-sm btn-primary" @click="openProject()">New project</button>
+            </div>
+          </div>
+
+          <template x-if="!projects.length">
+            <div class="card empty">
+              <div class="empty-title">No villa projects yet</div>
+              <div style="margin-bottom:1rem">Create a project so issued material can be costed against a job.</div>
+              <button class="btn btn-primary" @click="openProject()">Create project</button>
+            </div>
+          </template>
+
+          <template x-for="p in projects" :key="p.id">
+            <div class="card">
+              <div class="card-pad" style="border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap">
+                <div style="min-width:0">
+                  <div class="row" style="gap:.6rem">
+                    <h3 style="font-size:1rem" x-text="p.project_code"></h3>
+                    <span class="pill"
+                          :class="p.status==='complete' ? 'pill-good' : (p.status==='on hold' ? 'pill-warn' : 'pill-info')"
+                          x-text="p.status || 'active'"></span>
+                  </div>
+                  <p class="view-sub" x-text="[p.client, p.notes].filter(Boolean).join(' · ') || 'No client recorded'"></p>
+                </div>
+                <div class="row">
+                  <div class="right" style="margin-right:.5rem">
+                    <div class="num" style="font-size:1.35rem;font-weight:700;color:var(--violet)"
+                         x-text="fmt(projectTotal(p.id))"></div>
+                    <div class="faint" style="font-size:.7rem">TOTAL BOOKED</div>
+                  </div>
+                  <button class="btn btn-sm btn-ghost" @click="openProject(p)">Edit</button>
+                  <button class="btn btn-sm btn-danger" @click="removeProject(p)">Delete</button>
+                </div>
+              </div>
+
+              <template x-if="!projectLines(p.id).length">
+                <div class="empty" style="padding:1.6rem">Nothing booked to this project yet.</div>
+              </template>
+              <template x-if="projectLines(p.id).length">
+                <div class="table-wrap" style="border:none;border-radius:0">
+                  <table>
+                    <thead><tr>
+                      <th>Article</th><th>Material Description</th><th>System</th>
+                      <th class="right">Qty booked</th><th class="right">Bookings</th><th>Last booked</th>
+                    </tr></thead>
+                    <tbody>
+                      <template x-for="l in projectLines(p.id)" :key="l.article_ref">
+                        <tr>
+                          <td class="mono" style="color:var(--accent);font-weight:700" x-text="l.article_ref"></td>
+                          <td x-text="l.description"></td>
+                          <td class="muted" x-text="l.system_ref || '—'"></td>
+                          <td class="right num" style="font-weight:700" x-text="fmt(l.qty)"></td>
+                          <td class="right num muted" x-text="fmt(l.count)"></td>
+                          <td class="faint" x-text="when(l.last)"></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+
+        <!-- ============ SETTINGS ============ -->
+        <div id="view-settings" x-show="currentTab==='settings'" class="stack">
+          <div class="view-head">
+            <div>
+              <h2 class="view-title">Settings</h2>
+              <p class="view-sub">Shared by everyone using this database.</p>
+            </div>
+          </div>
+
+          <div class="card card-pad stack" style="max-width:660px">
+            <div class="field">
+              <label class="label">Default reorder threshold</label>
+              <input class="input num" type="number" min="0" step="any" x-model.number="settings.shortageThreshold">
+              <span class="hint">
+                Used for any article with no reorder level of its own. A profile counts as short
+                when its balance falls to or below this figure. Per-article levels always win —
+                a roller-set line running at 1,760 pieces needs a very different trigger point
+                from a corner cleat at 18.
+              </span>
+            </div>
+            <div class="row">
+              <button class="btn btn-primary" @click="saveSettings()" :disabled="saving">Save settings</button>
+              <button class="btn" @click="seedSample()" :disabled="saving">Load sample data</button>
+            </div>
+          </div>
+
+          <div class="card card-pad stack" style="max-width:660px">
+            <h3 style="font-size:.95rem">Database</h3>
+            <div class="row" style="justify-content:space-between;font-size:.85rem">
+              <span class="muted">Firebase project</span><span class="mono" x-text="projectId"></span>
+            </div>
+            <div class="row" style="justify-content:space-between;font-size:.85rem">
+              <span class="muted">Articles / movements loaded</span>
+              <span class="num" x-text="`${inventory.length} / ${movements.length}`"></span>
+            </div>
+            <div class="row" style="justify-content:space-between;font-size:.85rem">
+              <span class="muted">Connection</span>
+              <span class="pill" :class="online ? 'pill-good' : 'pill-mute'"
+                    x-text="online ? 'online' : 'offline'"></span>
+            </div>
+            <div class="row" style="justify-content:space-between;font-size:.85rem">
+              <span class="muted">Waiting to sync</span>
+              <span class="num" x-text="pendingWrites"></span>
+            </div>
+            <p class="hint">
+              Every article, movement and project is stored on this device first, so the app
+              works with no connection at all. Changes sync to the other devices by themselves
+              whenever there is a network. The ledger shows the most recent 300 movements for
+              speed; the full history is kept.
+            </p>
+          </div>
+        </div>
+
+      </div><!-- /view -->
+    </main>
+  </div>
+  </template>
+
+  <!-- ===================== ITEM MODAL ===================== -->
+  <template x-if="itemOpen">
+    <div class="backdrop" @click.self="itemOpen=false" @keydown.escape.window="itemOpen=false">
+      <div class="modal">
+        <div class="modal-head">
+          <h3 x-text="itemForm.id ? 'Edit profile' : 'Add profile'"></h3>
+          <button class="btn btn-sm btn-ghost" @click="itemOpen=false">Close</button>
+        </div>
+        <form @submit.prevent="saveItem()">
+          <div class="modal-body">
+            <div class="grid-2">
+              <div class="field">
+                <label class="label">Article code *</label>
+                <input class="input mono" x-model.trim="itemForm.article_ref" required placeholder="e.g. 391440">
+              </div>
+              <div class="field">
+                <label class="label">System reference</label>
+                <input class="input" x-model.trim="itemForm.system_ref" list="system-list" placeholder="e.g. ADS / AWS 65">
+              </div>
+            </div>
+            <div class="field">
+              <label class="label">Profile component description *</label>
+              <input class="input" x-model.trim="itemForm.description" required
+                     placeholder="e.g. INNER PROFILE 69 (319760) ( I )">
+            </div>
+            <div class="grid-3">
+              <div class="field">
+                <label class="label">Unit</label>
+                <input class="input" x-model.trim="itemForm.unit" placeholder="bars / packets / sets">
+              </div>
+              <div class="field">
+                <label class="label">Location</label>
+                <input class="input" x-model.trim="itemForm.location" placeholder="Rack A3">
+              </div>
+              <div class="field">
+                <label class="label">Reorder level</label>
+                <input class="input num" type="number" min="0" step="any" x-model.number="itemForm.min_qty">
+                <span class="hint" x-text="`0 = use default (${fmt(settings.shortageThreshold)})`"></span>
+              </div>
+            </div>
+            <template x-if="!itemForm.id">
+              <div class="field">
+                <label class="label">Opening stock received</label>
+                <input class="input num" type="number" min="0" step="any" x-model.number="itemForm.received_qty">
+                <span class="hint">Recorded as an opening receipt in the ledger.</span>
+              </div>
+            </template>
+            <template x-if="itemForm.id">
+              <div class="banner banner-info">
+                Received and issued totals change through stock movements, not here — that is what
+                keeps the audit trail intact. Use <strong>Receive</strong> / <strong>Issue</strong>
+                on the stock table.
+              </div>
+            </template>
+          </div>
+          <div class="modal-foot">
+            <template x-if="itemForm.id">
+              <button type="button" class="btn btn-danger" @click="removeItem()">Delete</button>
+            </template>
+            <button type="button" class="btn" @click="itemOpen=false">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="saving">
+              <span x-show="saving" class="spinner"></span><span>Save profile</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </template>
+
+  <!-- ===================== MOVEMENT MODAL ===================== -->
+  <template x-if="moveOpen">
+    <div class="backdrop" @click.self="moveOpen=false" @keydown.escape.window="moveOpen=false">
+      <div class="modal" style="max-width:520px">
+        <div class="modal-head">
+          <h3 x-text="moveForm.type==='receive' ? 'Receive stock' : (moveForm.type==='issue' ? 'Issue stock' : 'Adjust stock')"></h3>
+          <button class="btn btn-sm btn-ghost" @click="moveOpen=false">Close</button>
+        </div>
+        <form @submit.prevent="saveMove()">
+          <div class="modal-body">
+            <div class="card card-pad" style="background:var(--bg-2)">
+              <div class="mono" style="color:var(--accent);font-weight:700" x-text="moveForm.article_ref"></div>
+              <div class="muted" style="font-size:.85rem" x-text="moveForm.description"></div>
+              <div class="row" style="margin-top:.6rem;font-size:.8rem">
+                <span class="muted">On hand: <strong class="num" x-text="fmt(moveForm.on_hand)"></strong></span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="label">Movement type</label>
+              <div class="seg">
+                <button type="button" :class="moveForm.type==='receive' && 'on'" @click="moveForm.type='receive'">Receive</button>
+                <button type="button" :class="moveForm.type==='issue' && 'on'" @click="moveForm.type='issue'">Issue</button>
+                <button type="button" :class="moveForm.type==='adjust' && 'on'" @click="moveForm.type='adjust'">Adjust</button>
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="label">Quantity *</label>
+              <input class="input num" type="number" min="0" step="any" x-model.number="moveForm.qty" required placeholder="0">
+              <template x-if="moveForm.type==='issue' && moveForm.qty > moveForm.on_hand">
+                <span class="hint" style="color:var(--warn)">
+                  This issues more than the recorded balance and will leave a negative stock position.
+                </span>
+              </template>
+              <template x-if="moveForm.type==='adjust'">
+                <span class="hint">An adjustment corrects the received total — a recount, or damaged bars written back in.</span>
+              </template>
+            </div>
+
+            <div class="field" x-show="moveForm.type==='issue'">
+              <label class="label">Villa project</label>
+              <select class="select" x-model="moveForm.project_id">
+                <option value="">— Unallocated —</option>
+                <template x-for="p in projects" :key="p.id">
+                  <option :value="p.id" x-text="p.project_code"></option>
+                </template>
+              </select>
+            </div>
+
+            <div class="field">
+              <label class="label">Note</label>
+              <input class="input" x-model.trim="moveForm.note" placeholder="Delivery note no., cutter name, reason…">
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn" @click="moveOpen=false">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="saving">
+              <span x-show="saving" class="spinner"></span><span>Post movement</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </template>
+
+  <!-- ===================== PROJECT MODAL ===================== -->
+  <template x-if="projectOpen">
+    <div class="backdrop" @click.self="projectOpen=false" @keydown.escape.window="projectOpen=false">
+      <div class="modal" style="max-width:520px">
+        <div class="modal-head">
+          <h3 x-text="projectForm.id ? 'Edit project' : 'New villa project'"></h3>
+          <button class="btn btn-sm btn-ghost" @click="projectOpen=false">Close</button>
+        </div>
+        <form @submit.prevent="saveProject()">
+          <div class="modal-body">
+            <div class="field">
+              <label class="label">Project code / name *</label>
+              <input class="input" x-model.trim="projectForm.project_code" required
+                     placeholder="e.g. Villa 1348 - RASHA">
+            </div>
+            <div class="grid-2">
+              <div class="field">
+                <label class="label">Client</label>
+                <input class="input" x-model.trim="projectForm.client">
+              </div>
+              <div class="field">
+                <label class="label">Status</label>
+                <select class="select" x-model="projectForm.status">
+                  <option value="active">active</option>
+                  <option value="on hold">on hold</option>
+                  <option value="complete">complete</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label class="label">Notes</label>
+              <textarea class="textarea" x-model.trim="projectForm.notes"></textarea>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn" @click="projectOpen=false">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="saving">
+              <span x-show="saving" class="spinner"></span><span>Save project</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </template>
+
+  <!-- ===================== BOM MODAL ===================== -->
+  <template x-if="bomOpen">
+    <div class="backdrop" @click.self="bomOpen=false" @keydown.escape.window="bomOpen=false">
+      <div class="modal" style="max-width:780px">
+        <div class="modal-head">
+          <h3 x-text="bomForm.id ? 'Edit BOM template' : 'New BOM template'"></h3>
+          <button class="btn btn-sm btn-ghost" @click="bomOpen=false">Close</button>
+        </div>
+        <form @submit.prevent="saveBom()">
+          <div class="modal-body">
+            <div class="grid-2">
+              <div class="field">
+                <label class="label">Template name *</label>
+                <input class="input" x-model.trim="bomForm.name" placeholder="e.g. ASE 36 Pocket Sliding Door" required>
+              </div>
+              <div class="field">
+                <label class="label">System reference</label>
+                <input class="input" x-model.trim="bomForm.system_ref" list="system-list" placeholder="ASE 36">
+              </div>
+            </div>
+
+            <template x-if="!bomForm.id && systems.length">
+              <div class="banner banner-info">
+                <div style="width:100%">
+                  <strong>Seed from a system group.</strong>
+                  Pulls in every article carrying that system reference at 1 per unit, ready for
+                  you to correct — faster than typing a long bundle by hand.
+                  <div class="row" style="margin-top:.6rem">
+                    <select class="select" style="max-width:240px" x-model="bomSeedSystem">
+                      <option value="">— Choose system —</option>
+                      <template x-for="s in systems" :key="s">
+                        <option :value="s" x-text="s"></option>
+                      </template>
+                    </select>
+                    <button type="button" class="btn btn-sm" @click="seedBomFromSystem()" :disabled="!bomSeedSystem">
+                      Seed lines
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <div>
+              <div class="row" style="justify-content:space-between;margin-bottom:.5rem">
+                <span class="label">Profiles consumed per unit</span>
+                <button type="button" class="btn btn-sm" @click="addBomLine()">Add line</button>
+              </div>
+              <div class="stack" style="gap:.6rem">
+                <template x-for="(line,idx) in bomForm.lines" :key="idx">
+                  <div class="bom-line">
+                    <div class="field">
+                      <label class="label">Article</label>
+                      <input class="input mono" x-model.trim="line.article_ref" list="article-list"
+                             placeholder="Article code" @change="fillLine(line)">
+                    </div>
+                    <div class="field">
+                      <label class="label">Description</label>
+                      <input class="input" x-model.trim="line.description" placeholder="Auto-filled from stock list">
+                    </div>
+                    <div class="field">
+                      <label class="label">Qty / unit</label>
+                      <input class="input num" type="number" min="0" step="any" x-model.number="line.qty_per">
+                    </div>
+                    <button type="button" class="btn btn-sm btn-danger" @click="bomForm.lines.splice(idx,1)"
+                            aria-label="Remove line">&#10005;</button>
+                  </div>
+                </template>
+                <template x-if="!bomForm.lines.length">
+                  <p class="hint">No lines yet — add the profiles this system consumes.</p>
+                </template>
+              </div>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn" @click="bomOpen=false">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="saving">
+              <span x-show="saving" class="spinner"></span><span>Save template</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </template>
+
+  <!-- ===================== IMPORT MODAL ===================== -->
+  <template x-if="importOpen">
+    <div class="backdrop" @click.self="importOpen=false" @keydown.escape.window="importOpen=false">
+      <div class="modal" style="max-width:660px">
+        <div class="modal-head">
+          <h3>Import stock list (CSV)</h3>
+          <button class="btn btn-sm btn-ghost" @click="importOpen=false">Close</button>
+        </div>
+        <div class="modal-body">
+          <div class="banner banner-info">
+            <div>
+              Header row required. Recognised columns (either spelling works):<br>
+              <span class="mono" style="font-size:.78rem">system_ref, article_ref, description, unit, location, min_qty, received_qty, issued_qty</span><br>
+              Existing article codes are updated; new ones are created.
+            </div>
+          </div>
+          <div class="field">
+            <label class="label">Paste CSV, or choose a file</label>
+            <textarea class="textarea" style="min-height:160px;font-family:var(--mono);font-size:.8rem"
+                      x-model="importText"
+                      placeholder="system_ref,article_ref,description,received_qty,issued_qty&#10;ADS / AWS 65,391440,INNER PROFILE 69 (319760) ( I ),273,17"></textarea>
+          </div>
+          <input type="file" accept=".csv,text/csv" class="input" @change="readCsvFile($event)">
+        </div>
+        <div class="modal-foot">
+          <button class="btn" @click="importOpen=false">Cancel</button>
+          <button class="btn btn-primary" @click="runImport()" :disabled="saving || !importText.trim()">
+            <span x-show="saving" class="spinner"></span><span>Import</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <datalist id="article-list">
+    <template x-for="i in inventory" :key="i.id">
+      <option :value="i.article_ref" x-text="i.description"></option>
+    </template>
+  </datalist>
+  <datalist id="system-list">
+    <template x-for="s in systems" :key="s">
+      <option :value="s"></option>
+    </template>
+  </datalist>
+
+  <div class="toasts">
+    <template x-for="t in toasts" :key="t.id">
+      <div class="toast" :class="t.kind" x-text="t.text"></div>
+    </template>
+  </div>
+
+</div><!-- /#app -->
+
+<script type="module">
+/* ===========================================================================
+   Eurolux Inventory — application logic
+   Firebase modular SDK v10 + Alpine.js 3
+
+   Firestore data model
+     inventory/{id}  system_ref, article_ref, description, unit, location,
+                     min_qty, received_qty, issued_qty, balance_stock_qty
+     movements/{id}  item_id, article_ref, description, system_ref, type,
+                     qty, project_id, project_code, note, at, by, by_name
+     projects/{id}   project_code, client, status, notes
+     boms/{id}       name, system_ref, lines[{article_ref, description, qty_per}]
+     settings/app    shortageThreshold
+     users/{uid}     email, name, lastSeen
+
+   balance_stock_qty is maintained atomically alongside received/issued so it can
+   be read straight out of Firestore, but every figure shown in the UI is computed
+   as received − issued. A drifted stored value therefore cannot mislead anyone.
+   =========================================================================== */
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword,
+  createUserWithEmailAndPassword, signOut, updateProfile
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  collection, doc, onSnapshot, query, orderBy, limit,
+  addDoc, setDoc, updateDoc, deleteDoc, writeBatch,
+  serverTimestamp, increment
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+import {
+  firebaseConfig, allowedEmailDomain, collections, defaultShortageThreshold
+} from "./firebase-config.js";
+
+/* --- Config guard ------------------------------------------------------- */
+const configMissing =
+  !firebaseConfig ||
+  !firebaseConfig.apiKey ||
+  String(firebaseConfig.apiKey).startsWith("PASTE_") ||
+  String(firebaseConfig.projectId || "").startsWith("PASTE_");
+
+let auth = null, db = null;
+if (!configMissing) {
+  const fbApp = initializeApp(firebaseConfig);
+  auth = getAuth(fbApp);
+  try {
+    db = initializeFirestore(fbApp, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    });
+  } catch (err) {
+    console.warn("Firestore offline persistence unavailable:", err);
+    db = initializeFirestore(fbApp, {});
+  }
+}
+
+/* --- Helpers ------------------------------------------------------------ */
+const nf = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 2 });
+const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+const key = (v) => String(v ?? "").trim().toLowerCase();
+
+function friendlyAuthError(code, fallback) {
+  const map = {
+    "auth/invalid-email": "That email address doesn't look right.",
+    "auth/invalid-credential": "Email or password is incorrect.",
+    "auth/wrong-password": "Email or password is incorrect.",
+    "auth/user-not-found": "No account with that email. Use “Create account” first.",
+    "auth/email-already-in-use": "An account with that email already exists — sign in instead.",
+    "auth/weak-password": "Password must be at least 6 characters.",
+    "auth/network-request-failed": "No network connection. Check your internet and try again.",
+    "auth/too-many-requests": "Too many attempts. Wait a minute and try again.",
+    "auth/unauthorized-domain":
+      "This web address is not authorised in Firebase (Authentication → Settings → Authorised domains).",
+    "auth/operation-not-allowed":
+      "Email/password sign-in is not enabled in the Firebase console (Authentication → Sign-in method).",
+  };
+  return map[code] || fallback || "Sign-in failed. Please try again.";
+}
+
+/* Minimal RFC-4180-ish CSV parser (handles quotes and embedded commas). */
+function parseCsv(text) {
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+    else if (c !== "\r") field += c;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter((r) => r.some((c) => String(c).trim() !== ""));
+}
+
+function toCsv(rows) {
+  return rows.map((r) =>
+    r.map((cell) => {
+      const s = cell === null || cell === undefined ? "" : String(cell);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }).join(",")
+  ).join("\n");
+}
+
+function downloadCsv(rows, filename) {
+  const blob = new Blob(["﻿" + toCsv(rows)], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* Sample data — the Schüco articles and villa projects from the prototype. */
+const SAMPLE_INVENTORY = [
+  { system_ref: "ADS / AWS 65", article_ref: "391420",  description: "INSRT OUTER FR.53/24 (319740) ( I )", received_qty: 26,   issued_qty: 0,    unit: "bars" },
+  { system_ref: "ADS / AWS 65", article_ref: "391440",  description: "INNER PROFILE 69 (319760) ( I )",     received_qty: 273,  issued_qty: 17,   unit: "bars" },
+  { system_ref: "ADS / AWS 65", article_ref: "391470",  description: "OUTER PROFILE 40 (319760) (O)",       received_qty: 273,  issued_qty: 17,   unit: "bars" },
+  { system_ref: "ADS / AWS 65", article_ref: "224085",  description: "PA INSUL. BAR SM 32,5",               received_qty: 519,  issued_qty: 49,   unit: "bars" },
+  { system_ref: "ASE 70 PD.ME", article_ref: "9626192", description: "OUTER FRAME TOP (9626194) ( I )",     received_qty: 63,   issued_qty: 0,    unit: "bars" },
+  { system_ref: "ASE 70 PD.ME", article_ref: "291009",  description: "ROLLER 35 SETS ASSEMBLY",             received_qty: 1760, issued_qty: 400,  unit: "sets", min_qty: 200 },
+  { system_ref: "ASE 54 PD",    article_ref: "585100",  description: "CORNER CLEAT PROFILE - SP-11",        received_qty: 18,   issued_qty: 6.25, unit: "bars" },
+  { system_ref: "ASE 36",       article_ref: "9638553", description: "Inner Shell Vent Profile",            received_qty: 33,   issued_qty: 21,   unit: "bars" },
+];
+const SAMPLE_PROJECTS = [
+  { project_code: "Villa 1348 - RASHA",           client: "", status: "active", notes: "" },
+  { project_code: "Villa D58 - Flame Tree Ridge", client: "", status: "active", notes: "" },
+  { project_code: "Villa 1361 - C35",             client: "", status: "active", notes: "" },
+];
+
+/* ===========================================================================
+   Alpine component
+   =========================================================================== */
+document.addEventListener("alpine:init", () => {
+  window.Alpine.data("euroluxApp", () => ({
+
+    /* ---------------- state ---------------- */
+    configMissing,
+    projectId: (firebaseConfig && firebaseConfig.projectId) || "—",
+    authReady: false,
+    authUser: null,
+    authMode: "signin",
+    authEmail: "", authPassword: "", authName: "",
+    authError: "", authBusy: false, overrideName: "",
+
+    online: navigator.onLine,
+    menuOpen: false,
+    currentTab: "dashboard",
+    searchQuery: "",
+    selectedCategory: "ALL SYSTEMS",
+    moveFilter: "",
+    saving: false,
+    issuing: false,
+    toasts: [],
+
+    inventory: [], movements: [], projects: [], boms: [],
+    _pending: {},
+    settings: { shortageThreshold: num(defaultShortageThreshold) || 10 },
+
+    itemOpen: false, itemForm: {},
+    moveOpen: false, moveForm: {},
+    projectOpen: false, projectForm: {},
+    bomOpen: false, bomForm: { lines: [] }, bomSeedSystem: "",
+    importOpen: false, importText: "",
+
+    wizard: { bomId: "", units: 1, projectId: "" },
+
+    tabs: [
+      { id: "dashboard", label: "Main Dashboard",
+        icon: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>' },
+      { id: "inventory", label: "Master Stock",
+        icon: '<path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4"/><path d="M12 11v10"/>' },
+      { id: "movements", label: "Movement Ledger",
+        icon: '<path d="M4 7h13l-3-3"/><path d="M20 17H7l3 3"/>' },
+      { id: "wizard", label: "BOM Wizard",
+        icon: '<path d="M12 3l2.1 4.6 5 .6-3.7 3.4 1 5-4.4-2.5L7.6 16.6l1-5L4.9 8.2l5-.6z"/>' },
+      { id: "projects", label: "Villa Projects",
+        icon: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>' },
+      { id: "settings", label: "Settings",
+        icon: '<circle cx="12" cy="12" r="3"/><path d="M20 12a8 8 0 00-.14-1.5l2-1.5-2-3.46-2.35.9a8 8 0 00-2.6-1.5L14.5 2h-4l-.4 2.94a8 8 0 00-2.6 1.5l-2.36-.9-2 3.46 2 1.5a8 8 0 000 3l-2 1.5 2 3.46 2.35-.9a8 8 0 002.6 1.5l.41 2.94h4l.4-2.94a8 8 0 002.6-1.5l2.36.9 2-3.46-2-1.5c.1-.49.14-1 .14-1.5z"/>' },
+    ],
+
+    /* ---------------- computed ---------------- */
+    get displayName() {
+      // updateProfile() does not refire onAuthStateChanged, so a name set during
+      // sign-up is held here until the next session picks it up from the token.
+      return this.overrideName ||
+             this.authUser?.displayName ||
+             this.authUser?.email?.split("@")[0] ||
+             "User";
+    },
+    get initials() {
+      return this.displayName.split(/[\s._-]+/).filter(Boolean).slice(0, 2)
+        .map((s) => s[0].toUpperCase()).join("") || "U";
+    },
+    get systems() {
+      return [...new Set(this.inventory.map((i) => i.system_ref).filter(Boolean))]
+        .sort((a, b) => String(a).localeCompare(String(b)));
+    },
+    get filteredInventory() {
+      const q = key(this.searchQuery);
+      let list = this.inventory;
+      if (this.selectedCategory !== "ALL SYSTEMS") {
+        list = list.filter((i) => i.system_ref === this.selectedCategory);
+      }
+      if (q) {
+        list = list.filter((i) =>
+          [i.article_ref, i.description, i.system_ref, i.location]
+            .map((v) => String(v ?? "")).join(" ").toLowerCase().includes(q));
+      }
+      return [...list].sort((a, b) => {
+        const s = String(a.system_ref || "").localeCompare(String(b.system_ref || ""));
+        return s !== 0 ? s
+          : String(a.article_ref).localeCompare(String(b.article_ref), undefined, { numeric: true });
+      });
+    },
+    get filteredMovements() {
+      const q = key(this.searchQuery);
+      return this.movements.filter((m) => {
+        if (this.moveFilter && m.type !== this.moveFilter) return false;
+        if (!q) return true;
+        return [m.article_ref, m.description, m.project_code, m.note, m.by_name]
+          .map((v) => String(v ?? "")).join(" ").toLowerCase().includes(q);
+      });
+    },
+    get totals() { return this.sumOf(this.inventory); },
+    get filteredTotals() { return this.sumOf(this.filteredInventory); },
+    get systemSummary() {
+      const map = new Map();
+      for (const i of this.inventory) {
+        const name = i.system_ref || "(no system)";
+        if (!map.has(name)) map.set(name, { name, count: 0, received: 0, issued: 0, balance: 0, short: 0 });
+        const s = map.get(name);
+        s.count++;
+        s.received += num(i.received_qty);
+        s.issued += num(i.issued_qty);
+        s.balance += this.balanceOf(i);
+        if (this.isShort(i)) s.short++;
+      }
+      return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+    },
+    get shortageItems() {
+      return this.inventory
+        .filter((i) => this.isShort(i))
+        .sort((a, b) =>
+          (this.reorderLevel(b) - this.balanceOf(b)) - (this.reorderLevel(a) - this.balanceOf(a)));
+    },
+    get shortageCount() { return this.shortageItems.length; },
+    /* How many writes are still sitting on this device, unsent. */
+    get pendingWrites() {
+      return Object.values(this._pending).reduce((a, b) => a + (b || 0), 0);
+    },
+    get syncLabel() {
+      const n = this.pendingWrites;
+      if (!this.online) return n ? n + " WAITING TO SYNC" : "OFFLINE \u2014 SAVED HERE";
+      return n ? "SYNCING " + n + "\u2026" : "SYNCED";
+    },
+    get syncClass() {
+      if (this.pendingWrites) return "pill-warn";
+      return this.online ? "pill-good" : "pill-mute";
+    },
+    get selectedBom() { return this.boms.find((b) => b.id === this.wizard.bomId) || null; },
+    get wizardLines() {
+      const bom = this.selectedBom;
+      if (!bom) return [];
+      const units = Math.max(0, num(this.wizard.units));
+      return (bom.lines || []).map((l) => {
+        const item = this.inventory.find((i) => key(i.article_ref) === key(l.article_ref));
+        const required = num(l.qty_per) * units;
+        const on_hand = item ? this.balanceOf(item) : 0;
+        return {
+          article_ref: l.article_ref,
+          description: (item && item.description) || l.description || "—",
+          system_ref: (item && item.system_ref) || bom.system_ref || "",
+          qty_per: num(l.qty_per),
+          required, on_hand,
+          short: Math.max(0, required - on_hand),
+          known: !!item,
+          item_id: item ? item.id : null,
+        };
+      });
+    },
+    get wizardShortage() { return this.wizardLines.some((l) => l.short > 0 || !l.known); },
+
+    /* ---------------- lifecycle ---------------- */
+    async initApp() {
+      const boot = document.getElementById("boot");
+      if (boot) boot.remove();
+      document.getElementById("app").style.display = "";
+
+      addEventListener("online", () => { this.online = true; });
+      addEventListener("offline", () => { this.online = false; });
+
+      // Work saved on this device but not yet sent. Closing the app is safe —
+      // Firestore keeps it and sends it next time — but clearing site data or
+      // uninstalling would lose it, so it is worth a warning.
+      addEventListener("beforeunload", (e) => {
+        if (this.pendingWrites > 0) { e.preventDefault(); e.returnValue = ""; }
+      });
+
+      const hash = location.hash.replace("#", "");
+      if (this.tabs.some((t) => t.id === hash)) this.currentTab = hash;
+
+      this.registerSw();
+
+      if (this.configMissing) { this.authReady = true; return; }
+
+      onAuthStateChanged(auth, (user) => {
+        this.authUser = user;
+        this.authReady = true;
+        if (user) this.subscribe(user);
+        else this.unsubscribeAll();
+      });
+    },
+
+    registerSw() {
+      if (!("serviceWorker" in navigator)) return;
+      if (location.protocol === "file:") return;
+      navigator.serviceWorker.register("sw.js")
+        .catch((e) => console.warn("Service worker registration failed:", e));
+    },
+
+    _unsubs: [],
+    unsubscribeAll() {
+      this._unsubs.forEach((fn) => { try { fn(); } catch (e) {} });
+      this._unsubs = [];
+      this.inventory = []; this.movements = []; this.projects = []; this.boms = [];
+    },
+
+    subscribe(user) {
+      this.unsubscribeAll();
+
+      setDoc(doc(db, collections.users, user.uid), {
+        email: user.email,
+        name: user.displayName || user.email,
+        lastSeen: serverTimestamp(),
+      }, { merge: true }).catch((e) => console.warn("Could not write user profile:", e));
+
+      const bind = (label, target, ref) => {
+        this._unsubs.push(onSnapshot(ref, { includeMetadataChanges: true },
+          (snap) => {
+            this[target] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            // Rows Firestore is still holding locally, waiting for the server.
+            this._pending[target] = snap.docs.filter((d) => d.metadata.hasPendingWrites).length;
+          },
+          (err) => {
+            console.error(label + " listener error:", err);
+            this.toast(
+              err.code === "permission-denied"
+                ? "No permission to read " + label + ". Publish the rules from firestore.rules."
+                : "Sync error on " + label + ": " + err.message, "err");
+          }));
+      };
+
+      bind("inventory", "inventory", collection(db, collections.inventory));
+      bind("projects", "projects", collection(db, collections.projects));
+      bind("BOM templates", "boms", collection(db, collections.boms));
+      bind("movements", "movements",
+        query(collection(db, collections.movements), orderBy("at", "desc"), limit(300)));
+
+      this._unsubs.push(onSnapshot(doc(db, collections.settings, "app"),
+        (snap) => {
+          const d = snap.data();
+          if (d && Number.isFinite(Number(d.shortageThreshold))) {
+            this.settings.shortageThreshold = Number(d.shortageThreshold);
+          }
+        },
+        (e) => console.warn("settings listener:", e)));
+    },
+
+    /* ---------------- auth ---------------- */
+    async submitAuth() {
+      this.authError = ""; this.authBusy = true;
+      const email = this.authEmail.trim();
+      try {
+        if (allowedEmailDomain &&
+            !email.toLowerCase().endsWith("@" + String(allowedEmailDomain).toLowerCase())) {
+          throw { code: "custom", message: "Only @" + allowedEmailDomain + " email addresses are allowed." };
+        }
+        if (this.authMode === "signup") {
+          const cred = await createUserWithEmailAndPassword(auth, email, this.authPassword);
+          const name = this.authName.trim();
+          if (name) {
+            await updateProfile(cred.user, { displayName: name });
+            this.overrideName = name;
+            // The listener already ran without the name; refresh the profile doc.
+            setDoc(doc(db, collections.users, cred.user.uid),
+                   { name, email, lastSeen: serverTimestamp() }, { merge: true })
+              .catch((err) => console.warn("Could not update profile name:", err));
+          }
+          this.toast("Account created — welcome.", "ok");
+        } else {
+          await signInWithEmailAndPassword(auth, email, this.authPassword);
+        }
+        this.authPassword = "";
+      } catch (e) {
+        this.authError = e.code === "custom" ? e.message : friendlyAuthError(e.code, e.message);
+      } finally {
+        this.authBusy = false;
+      }
+    },
+
+    async doSignOut() {
+      if (!confirm("Sign out of Eurolux Inventory?")) return;
+      this.unsubscribeAll();
+      await signOut(auth);
+      this.overrideName = "";
+      this.menuOpen = false;
+    },
+
+    /* ---------------- ui helpers ---------------- */
+    go(tab) {
+      this.currentTab = tab;
+      this.menuOpen = false;
+      history.replaceState(null, "", "#" + tab);
+    },
+    fmt(v) { return nf.format(num(v)); },
+    balanceOf(item) { return num(item.received_qty) - num(item.issued_qty); },
+    reorderLevel(item) {
+      const own = num(item.min_qty);
+      return own > 0 ? own : num(this.settings.shortageThreshold);
+    },
+    isShort(item) { return this.balanceOf(item) <= this.reorderLevel(item); },
+    statusLabel(item) {
+      const bal = this.balanceOf(item);
+      if (bal < 0) return "negative";
+      if (bal === 0) return "out of stock";
+      return bal <= this.reorderLevel(item) ? "low" : "in stock";
+    },
+    statusClass(item) {
+      const bal = this.balanceOf(item);
+      if (bal <= 0) return "pill-bad";
+      return bal <= this.reorderLevel(item) ? "pill-warn" : "pill-good";
+    },
+    moveClass(type) {
+      return type === "receive" ? "pill-good" : type === "issue" ? "pill-info" : "pill-mute";
+    },
+    sumOf(list) {
+      let received = 0, issued = 0;
+      for (const i of list) { received += num(i.received_qty); issued += num(i.issued_qty); }
+      return { received, issued, balance: received - issued };
+    },
+    when(ts) {
+      if (!ts) return "—";
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      if (Number.isNaN(d.getTime())) return "—";
+      return d.toLocaleString("en-GB", {
+        day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+      });
+    },
+    toast(text, kind = "info") {
+      const id = Date.now() + Math.random();
+      this.toasts.push({ id, text, kind });
+      setTimeout(() => { this.toasts = this.toasts.filter((t) => t.id !== id); }, 5000);
+    },
+
+    /* Firestore writes are deliberately NOT awaited.
+       The local database is updated straight away and the listeners fire, but
+       the returned promise only settles once the SERVER has acknowledged the
+       write — which, offline, is never. Awaiting it would leave the storekeeper
+       staring at a spinner after a movement that has in fact been saved, and
+       they would post it a second time. So: fire the write, update the UI from
+       the local snapshot, and report failures through this handler. */
+    track(promise, what) {
+      promise.catch((e) => {
+        console.error("Write failed (" + what + "):", e);
+        this.toast(
+          e.code === "permission-denied"
+            ? "Permission denied saving " + what + ". Check your Firestore rules."
+            : "Could not save " + what + ": " + e.message, "err");
+      });
+      return promise;
+    },
+    /* Wording for a write that has been saved locally but not yet sent. */
+    savedMsg(text) {
+      return this.online
+        ? text
+        : text + " Saved on this device \u2014 it will sync when you are back online.";
+    },
+
+    /* Aggregated per-article booking lines for one project. */
+    projectLines(pid) {
+      const map = new Map();
+      for (const m of this.movements) {
+        if (m.project_id !== pid || m.type !== "issue") continue;
+        const k = key(m.article_ref);
+        if (!map.has(k)) {
+          map.set(k, {
+            article_ref: m.article_ref,
+            description: m.description || "",
+            system_ref: m.system_ref || "",
+            qty: 0, count: 0, last: null,
+          });
+        }
+        const line = map.get(k);
+        line.qty += num(m.qty);
+        line.count++;
+        const t = m.at && m.at.toDate ? m.at.toDate() : (m.at ? new Date(m.at) : null);
+        if (t && (!line.last || t > line.last)) line.last = t;
+      }
+      return [...map.values()].sort((a, b) =>
+        String(a.article_ref).localeCompare(String(b.article_ref), undefined, { numeric: true }));
+    },
+    projectTotal(pid) {
+      return this.projectLines(pid).reduce((s, l) => s + l.qty, 0);
+    },
+
+    /* ---------------- settings ---------------- */
+    saveSettings() {
+      this.track(setDoc(doc(db, collections.settings, "app"), {
+        shortageThreshold: num(this.settings.shortageThreshold),
+        updatedAt: serverTimestamp(),
+        updatedBy: this.displayName,
+      }, { merge: true }), "settings");
+      this.toast(this.savedMsg("Settings saved for all users."), "ok");
+    },
+
+    /* ---------------- sample data ---------------- */
+    async seedSample() {
+      if (this.inventory.length &&
+          !confirm("Your stock list is not empty. Add the 8 sample articles anyway?")) return;
+      this.saving = true;
+      try {
+        const batch = writeBatch(db);
+        let added = 0;
+        for (const row of SAMPLE_INVENTORY) {
+          if (this.inventory.some((i) => key(i.article_ref) === key(row.article_ref))) continue;
+          batch.set(doc(collection(db, collections.inventory)), {
+            system_ref: row.system_ref,
+            article_ref: row.article_ref,
+            description: row.description,
+            unit: row.unit || "",
+            location: "",
+            min_qty: num(row.min_qty),
+            received_qty: num(row.received_qty),
+            issued_qty: num(row.issued_qty),
+            balance_stock_qty: num(row.received_qty) - num(row.issued_qty),
+            createdAt: serverTimestamp(), createdBy: this.displayName,
+          });
+          added++;
+        }
+        for (const p of SAMPLE_PROJECTS) {
+          if (this.projects.some((x) => key(x.project_code) === key(p.project_code))) continue;
+          batch.set(doc(collection(db, collections.projects)), {
+            ...p, createdAt: serverTimestamp(), createdBy: this.displayName,
+          });
+        }
+        this.track(batch.commit(), "sample data");
+        this.toast("Sample data loaded — " + added + " articles.", "ok");
+      } catch (e) {
+        this.toast("Could not load sample data: " + e.message, "err");
+      } finally { this.saving = false; }
+    },
+
+    /* ---------------- inventory CRUD ---------------- */
+    openItem(item = null) {
+      this.itemForm = item
+        ? { ...item }
+        : { article_ref: "", system_ref: "", description: "", unit: "bars",
+            location: "", min_qty: 0, received_qty: 0 };
+      this.itemOpen = true;
+    },
+
+    async saveItem() {
+      if (this.saving) return;
+      const f = this.itemForm;
+      if (!f.article_ref || !f.description) return;
+
+      const dup = this.inventory.find(
+        (i) => key(i.article_ref) === key(f.article_ref) && i.id !== f.id);
+      if (dup) { this.toast("Article " + f.article_ref + " already exists in the stock list.", "err"); return; }
+
+      this.saving = true;
+      try {
+        const base = {
+          article_ref: String(f.article_ref),
+          system_ref: f.system_ref || "",
+          description: f.description,
+          unit: f.unit || "",
+          location: f.location || "",
+          min_qty: num(f.min_qty),
+          updatedAt: serverTimestamp(),
+          updatedBy: this.displayName,
+        };
+
+        if (f.id) {
+          this.track(updateDoc(doc(db, collections.inventory, f.id), base), "the profile");
+          this.toast(this.savedMsg("Profile updated."), "ok");
+        } else {
+          const opening = num(f.received_qty);
+          // The id is generated locally, so this works with no network at all.
+          const ref = doc(collection(db, collections.inventory));
+          const batch = writeBatch(db);
+          batch.set(ref, {
+            ...base,
+            received_qty: opening,
+            issued_qty: 0,
+            balance_stock_qty: opening,
+            createdAt: serverTimestamp(),
+            createdBy: this.displayName,
+          });
+          if (opening > 0) {
+            batch.set(doc(collection(db, collections.movements)), {
+              item_id: ref.id, article_ref: base.article_ref, description: base.description,
+              system_ref: base.system_ref, type: "receive", qty: opening,
+              project_id: "", project_code: "", note: "Opening stock",
+              at: serverTimestamp(), by: this.authUser.uid, by_name: this.displayName,
+            });
+          }
+          this.track(batch.commit(), "the profile");
+          this.toast(this.savedMsg("Profile " + base.article_ref + " added."), "ok");
+        }
+        this.itemOpen = false;
+      } catch (e) {
+        this.toast("Could not save: " + e.message, "err");
+      } finally { this.saving = false; }
+    },
+
+    async removeItem() {
+      const f = this.itemForm;
+      if (!f.id) return;
+      if (!confirm("Delete " + f.article_ref + " from the stock list?\n\nMovement history is kept for audit.")) return;
+      this.track(deleteDoc(doc(db, collections.inventory, f.id)), "the deletion");
+      this.itemOpen = false;
+      this.toast(this.savedMsg("Profile deleted."), "ok");
+    },
+
+    /* ---------------- movements ---------------- */
+    openMove(item, type) {
+      this.moveForm = {
+        item_id: item.id,
+        article_ref: item.article_ref,
+        description: item.description,
+        system_ref: item.system_ref || "",
+        on_hand: this.balanceOf(item),
+        type, qty: null, project_id: "", note: "",
+      };
+      this.moveOpen = true;
+    },
+
+    async saveMove() {
+      if (this.saving) return;
+      const f = this.moveForm;
+      const qty = num(f.qty);
+      if (qty <= 0) { this.toast("Enter a quantity greater than zero.", "err"); return; }
+
+      this.saving = true;
+      try {
+        const project = this.projects.find((p) => p.id === f.project_id);
+        const batch = writeBatch(db);
+
+        // Atomic increments: two storekeepers posting at the same moment both count.
+        batch.update(doc(db, collections.inventory, f.item_id),
+          f.type === "issue"
+            ? { issued_qty: increment(qty), balance_stock_qty: increment(-qty),
+                updatedAt: serverTimestamp(), updatedBy: this.displayName }
+            : { received_qty: increment(qty), balance_stock_qty: increment(qty),
+                updatedAt: serverTimestamp(), updatedBy: this.displayName });
+
+        batch.set(doc(collection(db, collections.movements)), {
+          item_id: f.item_id, article_ref: f.article_ref, description: f.description,
+          system_ref: f.system_ref || "", type: f.type, qty,
+          project_id: f.project_id || "", project_code: (project && project.project_code) || "",
+          note: f.note || "", at: serverTimestamp(),
+          by: this.authUser.uid, by_name: this.displayName,
+        });
+
+        this.track(batch.commit(), "the movement");
+        this.moveOpen = false;
+        this.toast(this.savedMsg(
+          this.fmt(qty) + (f.type === "issue" ? " issued from " : " received into ") +
+          f.article_ref + "."), "ok");
+      } catch (e) {
+        this.toast("Could not post movement: " + e.message, "err");
+      } finally { this.saving = false; }
+    },
+
+    /* ---------------- projects ---------------- */
+    openProject(p = null) {
+      this.projectForm = p
+        ? { ...p }
+        : { project_code: "", client: "", status: "active", notes: "" };
+      this.projectOpen = true;
+    },
+    async saveProject() {
+      if (this.saving) return;
+      const f = this.projectForm;
+      if (!f.project_code) return;
+      this.saving = true;
+      try {
+        const data = {
+          project_code: f.project_code, client: f.client || "",
+          status: f.status || "active", notes: f.notes || "",
+          updatedAt: serverTimestamp(), updatedBy: this.displayName,
+        };
+        this.track(
+          f.id
+            ? updateDoc(doc(db, collections.projects, f.id), data)
+            : setDoc(doc(collection(db, collections.projects)),
+                     { ...data, createdAt: serverTimestamp() }),
+          "the project");
+        this.projectOpen = false;
+        this.toast(this.savedMsg("Project saved."), "ok");
+      } catch (e) {
+        this.toast("Could not save project: " + e.message, "err");
+      } finally { this.saving = false; }
+    },
+    async removeProject(p) {
+      if (!confirm('Delete project "' + p.project_code + '"?\n\nMaterial already booked to it stays in the ledger.')) return;
+      this.track(deleteDoc(doc(db, collections.projects, p.id)), "the deletion");
+      if (this.wizard.projectId === p.id) this.wizard.projectId = "";
+      this.toast(this.savedMsg("Project deleted."), "ok");
+    },
+
+    /* ---------------- BOM templates ---------------- */
+    openBom(b = null) {
+      this.bomSeedSystem = "";
+      this.bomForm = b
+        ? { ...b, lines: (b.lines || []).map((l) => ({ ...l })) }
+        : { name: "", system_ref: "", lines: [{ article_ref: "", description: "", qty_per: 1 }] };
+      this.bomOpen = true;
+    },
+    addBomLine() { this.bomForm.lines.push({ article_ref: "", description: "", qty_per: 1 }); },
+    fillLine(line) {
+      const item = this.inventory.find((i) => key(i.article_ref) === key(line.article_ref));
+      if (item && !line.description) line.description = item.description;
+    },
+    seedBomFromSystem() {
+      const sys = this.bomSeedSystem;
+      if (!sys) return;
+      const lines = this.inventory
+        .filter((i) => i.system_ref === sys)
+        .sort((a, b) => String(a.article_ref).localeCompare(String(b.article_ref), undefined, { numeric: true }))
+        .map((i) => ({ article_ref: i.article_ref, description: i.description, qty_per: 1 }));
+      if (!lines.length) { this.toast("No articles carry that system reference.", "err"); return; }
+      this.bomForm.lines = lines;
+      if (!this.bomForm.system_ref) this.bomForm.system_ref = sys;
+      if (!this.bomForm.name) this.bomForm.name = sys;
+      this.toast(lines.length + " lines seeded at 1 per unit — correct the quantities before saving.", "info");
+    },
+    async saveBom() {
+      if (this.saving) return;
+      const f = this.bomForm;
+      if (!f.name) return;
+      const lines = (f.lines || [])
+        .filter((l) => String(l.article_ref || "").trim())
+        .map((l) => ({
+          article_ref: String(l.article_ref).trim(),
+          description: l.description || "",
+          qty_per: num(l.qty_per),
+        }));
+      if (!lines.length) { this.toast("Add at least one profile line.", "err"); return; }
+
+      const zero = lines.filter((l) => l.qty_per <= 0);
+      if (zero.length && !confirm(
+        zero.length + " line(s) have a quantity of zero and will never be issued. Save anyway?")) return;
+
+      this.saving = true;
+      try {
+        const data = {
+          name: f.name, system_ref: f.system_ref || "", lines,
+          updatedAt: serverTimestamp(), updatedBy: this.displayName,
+        };
+        if (f.id) {
+          this.track(updateDoc(doc(db, collections.boms, f.id), data), "the template");
+        } else {
+          const ref = doc(collection(db, collections.boms));
+          this.track(setDoc(ref, { ...data, createdAt: serverTimestamp() }), "the template");
+          this.wizard.bomId = ref.id;
+        }
+        this.bomOpen = false;
+        this.toast(this.savedMsg("BOM template saved."), "ok");
+      } catch (e) {
+        this.toast("Could not save template: " + e.message, "err");
+      } finally { this.saving = false; }
+    },
+    async removeBom(b) {
+      if (!confirm('Delete BOM template "' + b.name + '"?')) return;
+      this.track(deleteDoc(doc(db, collections.boms, b.id)), "the deletion");
+      if (this.wizard.bomId === b.id) this.wizard.bomId = "";
+      this.toast(this.savedMsg("Template deleted."), "ok");
+    },
+
+    /* ---------------- batch booking ---------------- */
+    async issueBundle() {
+      const project = this.projects.find((p) => p.id === this.wizard.projectId);
+      if (!project) { this.toast("Select a project destination first.", "err"); return; }
+
+      const lines = this.wizardLines.filter((l) => l.required > 0);
+      if (!lines.length) { this.toast("Nothing to book — check the unit count.", "err"); return; }
+
+      const unknown = lines.filter((l) => !l.known);
+      const issuable = lines.filter((l) => l.known);
+      if (!issuable.length) { this.toast("None of these articles are in the stock list.", "err"); return; }
+
+      const shortLines = issuable.filter((l) => l.short > 0);
+      const msg =
+        "Book " + this.wizard.units + " × " + this.selectedBom.name +
+        " to " + project.project_code + "?\n\n" +
+        issuable.length + " profile line(s) will be issued." +
+        (unknown.length
+          ? "\n\n" + unknown.length + " article(s) are not in the stock list and will be skipped:\n" +
+            unknown.map((l) => l.article_ref).join(", ")
+          : "") +
+        (shortLines.length
+          ? "\n\n⚠ " + shortLines.length + " line(s) exceed available stock and will go negative."
+          : "");
+      if (!confirm(msg)) return;
+
+      this.issuing = true;
+      try {
+        const batch = writeBatch(db);
+        for (const l of issuable) {
+          batch.update(doc(db, collections.inventory, l.item_id), {
+            issued_qty: increment(l.required),
+            balance_stock_qty: increment(-l.required),
+            updatedAt: serverTimestamp(),
+            updatedBy: this.displayName,
+          });
+          batch.set(doc(collection(db, collections.movements)), {
+            item_id: l.item_id, article_ref: l.article_ref, description: l.description,
+            system_ref: l.system_ref || "", type: "issue", qty: l.required,
+            project_id: project.id, project_code: project.project_code,
+            note: "BOM: " + this.selectedBom.name + " × " + this.wizard.units,
+            at: serverTimestamp(), by: this.authUser.uid, by_name: this.displayName,
+          });
+        }
+        this.track(batch.commit(), "the bundle");
+        this.toast(this.savedMsg("Package bundle booked to " + project.project_code +
+                   " — " + issuable.length + " lines posted."), "ok");
+        this.go("projects");
+      } catch (e) {
+        this.toast("Could not book bundle: " + e.message, "err");
+      } finally { this.issuing = false; }
+    },
+
+    /* ---------------- CSV ---------------- */
+    exportCsv() {
+      const header = ["system_ref", "article_ref", "description", "unit", "location",
+                      "min_qty", "received_qty", "issued_qty", "balance_stock_qty"];
+      const rows = [header].concat(this.filteredInventory.map((i) => [
+        i.system_ref || "", i.article_ref, i.description, i.unit || "", i.location || "",
+        num(i.min_qty), num(i.received_qty), num(i.issued_qty), this.balanceOf(i),
+      ]));
+      downloadCsv(rows, "eurolux-stock-" + new Date().toISOString().slice(0, 10) + ".csv");
+    },
+
+    exportProjectCsv() {
+      const header = ["project_code", "article_ref", "description", "system_ref", "qty_booked", "bookings"];
+      const rows = [header];
+      for (const p of this.projects) {
+        for (const l of this.projectLines(p.id)) {
+          rows.push([p.project_code, l.article_ref, l.description, l.system_ref, l.qty, l.count]);
+        }
+      }
+      if (rows.length === 1) { this.toast("No bookings to export yet.", "err"); return; }
+      downloadCsv(rows, "eurolux-project-bookings-" + new Date().toISOString().slice(0, 10) + ".csv");
+    },
+
+    readCsvFile(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => { this.importText = String(reader.result || ""); };
+      reader.onerror = () => this.toast("Could not read that file.", "err");
+      reader.readAsText(file);
+    },
+
+    async runImport() {
+      if (this.saving) return;
+      const rows = parseCsv(this.importText.trim());
+      if (rows.length < 2) { this.toast("Need a header row plus at least one data row.", "err"); return; }
+
+      // Accept snake_case, camelCase or spaced headers.
+      const header = rows[0].map((h) => String(h).trim().replace(/[\s_-]+/g, "").toLowerCase());
+      const col = (...names) => {
+        for (const n of names) {
+          const idx = header.indexOf(n.replace(/[\s_-]+/g, "").toLowerCase());
+          if (idx >= 0) return idx;
+        }
+        return -1;
+      };
+      const cArticle = col("article_ref", "articleref", "article", "code");
+      if (cArticle < 0) { this.toast('CSV must contain an "article_ref" column.', "err"); return; }
+      const cDesc = col("description", "desc", "material_description"),
+            cSys  = col("system_ref", "system"),
+            cUnit = col("unit"), cLoc = col("location"),
+            cMin  = col("min_qty", "reorder", "reorder_level"),
+            cRec  = col("received_qty", "received"),
+            cIss  = col("issued_qty", "issued");
+
+      this.saving = true;
+      let created = 0, updated = 0, skipped = 0;
+      try {
+        const seen = new Set();
+        const data = [];
+        for (let i = 1; i < rows.length; i++) {
+          const r = rows[i];
+          const article_ref = String(r[cArticle] ?? "").trim();
+          if (!article_ref) { skipped++; continue; }
+          if (seen.has(key(article_ref))) { skipped++; continue; } // duplicate within the file
+          seen.add(key(article_ref));
+          data.push({ r, article_ref });
+        }
+
+        for (let i = 0; i < data.length; i += 200) {
+          const batch = writeBatch(db);
+          for (const entry of data.slice(i, i + 200)) {
+            const r = entry.r, article_ref = entry.article_ref;
+            const existing = this.inventory.find((x) => key(x.article_ref) === key(article_ref));
+
+            const fields = {
+              article_ref,
+              description: cDesc >= 0 ? String(r[cDesc] ?? "").trim() : ((existing && existing.description) || article_ref),
+              system_ref: cSys >= 0 ? String(r[cSys] ?? "").trim() : ((existing && existing.system_ref) || ""),
+              unit: cUnit >= 0 ? String(r[cUnit] ?? "").trim() : ((existing && existing.unit) || ""),
+              location: cLoc >= 0 ? String(r[cLoc] ?? "").trim() : ((existing && existing.location) || ""),
+              min_qty: cMin >= 0 ? num(r[cMin]) : num(existing && existing.min_qty),
+              updatedAt: serverTimestamp(),
+              updatedBy: this.displayName,
+            };
+            const received = cRec >= 0 ? num(r[cRec]) : num(existing && existing.received_qty);
+            const issued   = cIss >= 0 ? num(r[cIss]) : num(existing && existing.issued_qty);
+            if (cRec >= 0) fields.received_qty = received;
+            if (cIss >= 0) fields.issued_qty = issued;
+            if (cRec >= 0 || cIss >= 0) fields.balance_stock_qty = received - issued;
+
+            if (existing) {
+              batch.update(doc(db, collections.inventory, existing.id), fields);
+              updated++;
+            } else {
+              batch.set(doc(collection(db, collections.inventory)), {
+                received_qty: 0, issued_qty: 0, balance_stock_qty: 0, ...fields,
+                createdAt: serverTimestamp(), createdBy: this.displayName,
+              });
+              created++;
+            }
+          }
+          this.track(batch.commit(), "the import");
+        }
+        this.importOpen = false;
+        this.importText = "";
+        this.toast(this.savedMsg("Import complete — " + created + " created, " +
+                   updated + " updated" +
+                   (skipped ? ", " + skipped + " skipped" : "") + "."), "ok");
+      } catch (e) {
+        this.toast("Import failed: " + e.message, "err");
+      } finally { this.saving = false; }
+    },
+  }));
+});
+</script>
+
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</body>
+</html>
