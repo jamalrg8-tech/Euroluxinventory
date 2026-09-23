@@ -209,6 +209,10 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
 .seg{display:flex;background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:3px;gap:3px}
 .seg button{flex:1;padding:.45rem;border-radius:8px;font-size:.82rem;font-weight:600;color:var(--muted)}
 .seg button.on{background:var(--panel-2);color:var(--text)}
+.linkish{background:none;border:none;color:var(--accent);font-size:.82rem;
+  text-decoration:underline;text-underline-offset:3px;padding:.2rem;align-self:center}
+.linkish:hover{color:var(--text)}
+.linkish:disabled{opacity:.5;cursor:not-allowed}
 
 .banner{display:flex;gap:.7rem;align-items:flex-start;padding:.8rem .95rem;border-radius:var(--radius-sm);
   font-size:.83rem;border:1px solid;line-height:1.5}
@@ -319,10 +323,14 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
         </div>
 
         <div class="card card-pad stack">
-          <div class="seg">
-            <button :class="authMode==='signin' && 'on'" @click="authMode='signin';authError=''">Sign in</button>
-            <button :class="authMode==='signup' && 'on'" @click="authMode='signup';authError=''">Create account</button>
-          </div>
+          <template x-if="selfSignupEnabled">
+            <div class="seg">
+              <button :class="authMode==='signin' && 'on'"
+                      @click="authMode='signin';authError='';authNotice=''">Sign in</button>
+              <button :class="authMode==='signup' && 'on'"
+                      @click="authMode='signup';authError='';authNotice=''">Create account</button>
+            </div>
+          </template>
 
           <form @submit.prevent="submitAuth()" class="stack">
             <div class="field" x-show="authMode==='signup'">
@@ -339,6 +347,9 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                      placeholder="At least 6 characters" :autocomplete="authMode==='signup'?'new-password':'current-password'">
             </div>
 
+            <template x-if="authNotice">
+              <div class="banner banner-info" x-text="authNotice"></div>
+            </template>
             <template x-if="authError">
               <div class="banner banner-bad" x-text="authError"></div>
             </template>
@@ -347,8 +358,17 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
               <span x-show="authBusy" class="spinner"></span>
               <span x-text="authMode==='signin' ? 'Sign in' : 'Create account'"></span>
             </button>
+
+            <button type="button" class="linkish" x-show="authMode==='signin'"
+                    @click="resetPassword()" :disabled="authBusy">
+              Forgot your password?
+            </button>
           </form>
 
+          <p class="hint" x-show="!selfSignupEnabled">
+            Accounts are created by your administrator. If you do not have one yet,
+            ask them to add you.
+          </p>
           <p class="hint">
             Everyone who signs in shares the same live database. A receipt or issue
             posted on one device appears on every other device within a second.
@@ -729,7 +749,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
               <p class="view-sub">Every receipt, issue and adjustment, newest first. Rows cannot be edited or deleted.</p>
             </div>
             <div class="actions">
-              <select class="select" style="width:auto" x-model="moveFilter">
+              <select class="select" style="width:auto" x-model="moveFilter" @change="ledgerShown = 300">
                 <option value="">All types</option>
                 <option value="receive">Receipts</option>
                 <option value="issue">Issues</option>
@@ -751,7 +771,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                   <th class="right">Qty</th><th>Project</th><th>Note</th><th>By</th>
                 </tr></thead>
                 <tbody>
-                  <template x-for="m in filteredMovements" :key="m.id">
+                  <template x-for="m in visibleMovements" :key="m.id">
                     <tr>
                       <td class="faint" style="white-space:nowrap" x-text="when(m.at)"></td>
                       <td><span class="pill" :class="moveClass(m.type)" x-text="m.type"></span></td>
@@ -765,6 +785,14 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                   </template>
                 </tbody>
               </table>
+            </div>
+          </template>
+
+          <template x-if="filteredMovements.length > visibleMovements.length">
+            <div class="card" style="text-align:center;padding:.9rem">
+              <span class="muted" x-text="`Showing ${visibleMovements.length} of ${filteredMovements.length} movements.`"></span>
+              <button class="btn btn-sm" style="margin-left:.6rem" @click="ledgerShown += 300">Show 300 more</button>
+              <button class="btn btn-sm btn-ghost" @click="ledgerShown = filteredMovements.length">Show all</button>
             </div>
           </template>
         </div>
@@ -1027,8 +1055,8 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
             <p class="hint">
               Every article, movement and project is stored on this device first, so the app
               works with no connection at all. Changes sync to the other devices by themselves
-              whenever there is a network. The ledger shows the most recent 300 movements for
-              speed; the full history is kept.
+              whenever there is a network. The ledger table draws 300 rows at a time
+              for speed, but every movement is loaded, so project totals are complete.
             </p>
           </div>
         </div>
@@ -1307,22 +1335,34 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
     <div class="backdrop" @click.self="importOpen=false" @keydown.escape.window="importOpen=false">
       <div class="modal" style="max-width:660px">
         <div class="modal-head">
-          <h3>Import stock list (CSV)</h3>
+          <h3>Import data (CSV)</h3>
           <button class="btn btn-sm btn-ghost" @click="importOpen=false">Close</button>
         </div>
         <div class="modal-body">
           <div class="banner banner-info">
             <div>
-              Header row required. Recognised columns (either spelling works):<br>
-              <span class="mono" style="font-size:.78rem">system_ref, article_ref, description, unit, location, min_qty, received_qty, issued_qty</span><br>
-              Existing article codes are updated; new ones are created.
+              A header row is required. The header decides what gets imported:
+              <ul style="margin:.5rem 0 .2rem 1.1rem;padding:0">
+                <li><strong>Stock list</strong> &mdash;
+                  <span class="mono" style="font-size:.76rem">article_ref, description, system_ref, unit, location, min_qty, received_qty, issued_qty</span>.
+                  Existing article codes are updated, new ones created.</li>
+                <li><strong>Projects</strong> &mdash;
+                  <span class="mono" style="font-size:.76rem">project_code, client, status, notes</span>
+                  (no article_ref column).</li>
+                <li><strong>Movements</strong> &mdash;
+                  <span class="mono" style="font-size:.76rem">type, article_ref, qty, project_code, note, import_tag</span>.
+                  Each row becomes a permanent ledger entry and moves the balance.
+                  Missing projects are created. Articles not already in the stock
+                  list are skipped, so import the stock list first.</li>
+              </ul>
+              Loading a fresh database: stock list, then projects, then movements.
             </div>
           </div>
           <div class="field">
             <label class="label">Paste CSV, or choose a file</label>
             <textarea class="textarea" style="min-height:160px;font-family:var(--mono);font-size:.8rem"
                       x-model="importText"
-                      placeholder="system_ref,article_ref,description,received_qty,issued_qty&#10;ADS / AWS 65,391440,INNER PROFILE 69 (319760) ( I ),273,17"></textarea>
+                      placeholder="article_ref,description,system_ref,unit,min_qty&#10;391440,INNER PROFILE 69 (319760) ( I ),ADS / AWS 65,BAR,0"></textarea>
           </div>
           <input type="file" accept=".csv,text/csv" class="input" @change="readCsvFile($event)">
         </div>
@@ -1342,7 +1382,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
     </template>
   </datalist>
   <datalist id="system-list">
-    <template x-for="s in systems" :key="s">
+    <template x-for="s in systemOptions" :key="s">
       <option :value="s"></option>
     </template>
   </datalist>
@@ -1378,7 +1418,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword,
-  createUserWithEmailAndPassword, signOut, updateProfile
+  createUserWithEmailAndPassword, signOut, updateProfile, sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
@@ -1388,8 +1428,13 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 import {
-  firebaseConfig, allowedEmailDomain, collections, defaultShortageThreshold
+  firebaseConfig, allowedEmailDomain, collections, defaultShortageThreshold,
+  allowSelfSignup, knownSystems
 } from "./firebase-config.js";
+
+// Accounts are created by an administrator in the Firebase console unless the
+// config explicitly opts back in to self-registration.
+const selfSignupEnabled = allowSelfSignup === true;
 
 /* --- Config guard ------------------------------------------------------- */
 const configMissing =
@@ -1431,6 +1476,8 @@ function friendlyAuthError(code, fallback) {
       "This web address is not authorised in Firebase (Authentication → Settings → Authorised domains).",
     "auth/operation-not-allowed":
       "Email/password sign-in is not enabled in the Firebase console (Authentication → Sign-in method).",
+    "auth/admin-restricted-operation":
+      "New accounts are created by your administrator. Ask them to add you, then sign in here.",
   };
   return map[code] || fallback || "Sign-in failed. Please try again.";
 }
@@ -1497,12 +1544,13 @@ document.addEventListener("alpine:init", () => {
 
     /* ---------------- state ---------------- */
     configMissing,
+    selfSignupEnabled,
     projectId: (firebaseConfig && firebaseConfig.projectId) || "—",
     authReady: false,
     authUser: null,
     authMode: "signin",
     authEmail: "", authPassword: "", authName: "",
-    authError: "", authBusy: false, overrideName: "",
+    authError: "", authNotice: "", authBusy: false, overrideName: "",
 
     online: navigator.onLine,
     menuOpen: false,
@@ -1522,7 +1570,8 @@ document.addEventListener("alpine:init", () => {
     moveOpen: false, moveForm: {},
     projectOpen: false, projectForm: {},
     bomOpen: false, bomForm: { lines: [] }, bomSeedSystem: "",
-    importOpen: false, importText: "",
+    importOpen: false, importText: "", importsDone: {},
+    ledgerShown: 300,
 
     wizard: { bomId: "", units: 1, projectId: "" },
 
@@ -1554,9 +1603,24 @@ document.addEventListener("alpine:init", () => {
       return this.displayName.split(/[\s._-]+/).filter(Boolean).slice(0, 2)
         .map((s) => s[0].toUpperCase()).join("") || "U";
     },
+    /* Systems that actually carry stock. Drives the stock filter, the KPI
+       count and the BOM "seed from a system group" picker, so it must not
+       contain systems with nothing in them. */
     get systems() {
       return [...new Set(this.inventory.map((i) => i.system_ref).filter(Boolean))]
         .sort((a, b) => String(a).localeCompare(String(b)));
+    },
+    /* Everything offered when you TYPE a system reference: the systems above
+       plus the ones listed in firebase-config.js, so a new BOM template can
+       name a system before any stock carries it. */
+    get systemOptions() {
+      const out = [], seen = new Set();
+      for (const s of [...(knownSystems || []), ...this.systems]) {
+        const k = key(s);
+        if (!s || seen.has(k)) continue;
+        seen.add(k); out.push(s);
+      }
+      return out.sort((a, b) => String(a).localeCompare(String(b)));
     },
     get filteredInventory() {
       const q = key(this.searchQuery);
@@ -1575,6 +1639,7 @@ document.addEventListener("alpine:init", () => {
           : String(a.article_ref).localeCompare(String(b.article_ref), undefined, { numeric: true });
       });
     },
+    /* Every ledger row that matches the current filter — the real count. */
     get filteredMovements() {
       const q = key(this.searchQuery);
       return this.movements.filter((m) => {
@@ -1584,6 +1649,11 @@ document.addEventListener("alpine:init", () => {
           .map((v) => String(v ?? "")).join(" ").toLowerCase().includes(q);
       });
     },
+    /* What the ledger table actually draws. Thousands of rows in one table
+       makes the page crawl on a phone, so show a page at a time and let the
+       search box and the type filter do the narrowing. */
+    get visibleMovements() { return this.filteredMovements.slice(0, this.ledgerShown); },
+
     get totals() { return this.sumOf(this.inventory); },
     get filteredTotals() { return this.sumOf(this.filteredInventory); },
     get systemSummary() {
@@ -1716,8 +1786,16 @@ document.addEventListener("alpine:init", () => {
       bind("inventory", "inventory", collection(db, collections.inventory));
       bind("projects", "projects", collection(db, collections.projects));
       bind("BOM templates", "boms", collection(db, collections.boms));
+      /* The whole ledger, newest first. Villa Project totals are summed from
+         these rows, so a window would silently under-report every project.
+         Firestore keeps its own local copy, so this is one download, not one
+         per visit; the ledger TABLE is capped separately (LEDGER_PAGE). */
       bind("movements", "movements",
-        query(collection(db, collections.movements), orderBy("at", "desc"), limit(300)));
+        query(collection(db, collections.movements), orderBy("at", "desc")));
+
+      this._unsubs.push(onSnapshot(doc(db, collections.settings, "imports"),
+        (snap) => { this.importsDone = (snap && snap.data && snap.data()) || {}; },
+        (e) => console.warn("imports listener:", e)));
 
       this._unsubs.push(onSnapshot(doc(db, collections.settings, "app"),
         (snap) => {
@@ -1756,6 +1834,35 @@ document.addEventListener("alpine:init", () => {
         this.authPassword = "";
       } catch (e) {
         this.authError = e.code === "custom" ? e.message : friendlyAuthError(e.code, e.message);
+      } finally {
+        this.authBusy = false;
+      }
+    },
+
+    /* Firebase sends the email and hosts the reset page; there is nothing for
+       the app to build beyond asking for the address. */
+    async resetPassword() {
+      this.authError = ""; this.authNotice = "";
+      const email = this.authEmail.trim();
+      if (!email) {
+        this.authError = "Enter your email address above first, then press this again.";
+        return;
+      }
+      this.authBusy = true;
+      try {
+        await sendPasswordResetEmail(auth, email);
+        // Deliberately the same message whether or not the account exists, so
+        // this form cannot be used to discover who has an account.
+        this.authNotice =
+          "If there is an account for " + email + ", a reset link is on its way. " +
+          "Check the inbox, and the spam folder.";
+      } catch (e) {
+        const code = e.code || "";
+        this.authError =
+          code === "auth/invalid-email" ? "That email address doesn't look right."
+          : code === "auth/too-many-requests" ? "Too many attempts. Wait a minute and try again."
+          : code === "auth/network-request-failed" ? "No connection. Check your internet and try again."
+          : friendlyAuthError(e.message);
       } finally {
         this.authBusy = false;
       }
@@ -2227,6 +2334,22 @@ document.addEventListener("alpine:init", () => {
       reader.readAsText(file);
     },
 
+    /* ------------------------------------------------------------------
+       Import. One entry point, three kinds of file, chosen by the header:
+         has "type" + "qty"                -> movement ledger rows
+         has "project_code", no "article_ref" -> villa projects
+         otherwise                          -> the stock list
+       Recommended order for a fresh database: stock, projects, movements.
+    ------------------------------------------------------------------ */
+    importKind(header) {
+      const has = (...names) =>
+        names.some((n) => header.indexOf(n.replace(/[\s_-]+/g, "").toLowerCase()) >= 0);
+      if (has("type") && has("qty", "quantity")) return "movements";
+      if (has("project_code", "project") && !has("article_ref", "articleref", "article", "code"))
+        return "projects";
+      return "inventory";
+    },
+
     async runImport() {
       if (this.saving) return;
       const rows = parseCsv(this.importText.trim());
@@ -2241,6 +2364,20 @@ document.addEventListener("alpine:init", () => {
         }
         return -1;
       };
+
+      const kind = this.importKind(header);
+      this.saving = true;
+      try {
+        if (kind === "movements")    await this.importMovements(rows, col);
+        else if (kind === "projects") await this.importProjects(rows, col);
+        else                          await this.importInventory(rows, col);
+      } catch (e) {
+        this.toast("Import failed: " + e.message, "err");
+      } finally { this.saving = false; }
+    },
+
+    /* ---- the stock list ------------------------------------------------ */
+    async importInventory(rows, col) {
       const cArticle = col("article_ref", "articleref", "article", "code");
       if (cArticle < 0) { this.toast('CSV must contain an "article_ref" column.', "err"); return; }
       const cDesc = col("description", "desc", "material_description"),
@@ -2250,63 +2387,212 @@ document.addEventListener("alpine:init", () => {
             cRec  = col("received_qty", "received"),
             cIss  = col("issued_qty", "issued");
 
-      this.saving = true;
       let created = 0, updated = 0, skipped = 0;
-      try {
-        const seen = new Set();
-        const data = [];
-        for (let i = 1; i < rows.length; i++) {
-          const r = rows[i];
-          const article_ref = String(r[cArticle] ?? "").trim();
-          if (!article_ref) { skipped++; continue; }
-          if (seen.has(key(article_ref))) { skipped++; continue; } // duplicate within the file
-          seen.add(key(article_ref));
-          data.push({ r, article_ref });
-        }
+      const seen = new Set();
+      const data = [];
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        const article_ref = String(r[cArticle] ?? "").trim();
+        if (!article_ref) { skipped++; continue; }
+        if (seen.has(key(article_ref))) { skipped++; continue; } // duplicate within the file
+        seen.add(key(article_ref));
+        data.push({ r, article_ref });
+      }
 
-        for (let i = 0; i < data.length; i += 200) {
-          const batch = writeBatch(db);
-          for (const entry of data.slice(i, i + 200)) {
-            const r = entry.r, article_ref = entry.article_ref;
-            const existing = this.inventory.find((x) => key(x.article_ref) === key(article_ref));
+      for (let i = 0; i < data.length; i += 200) {
+        const batch = writeBatch(db);
+        for (const entry of data.slice(i, i + 200)) {
+          const r = entry.r, article_ref = entry.article_ref;
+          const existing = this.inventory.find((x) => key(x.article_ref) === key(article_ref));
 
-            const fields = {
-              article_ref,
-              description: cDesc >= 0 ? String(r[cDesc] ?? "").trim() : ((existing && existing.description) || article_ref),
-              system_ref: cSys >= 0 ? String(r[cSys] ?? "").trim() : ((existing && existing.system_ref) || ""),
-              unit: cUnit >= 0 ? String(r[cUnit] ?? "").trim() : ((existing && existing.unit) || ""),
-              location: cLoc >= 0 ? String(r[cLoc] ?? "").trim() : ((existing && existing.location) || ""),
-              min_qty: cMin >= 0 ? num(r[cMin]) : num(existing && existing.min_qty),
-              updatedAt: serverTimestamp(),
-              updatedBy: this.displayName,
-            };
-            const received = cRec >= 0 ? num(r[cRec]) : num(existing && existing.received_qty);
-            const issued   = cIss >= 0 ? num(r[cIss]) : num(existing && existing.issued_qty);
-            if (cRec >= 0) fields.received_qty = received;
-            if (cIss >= 0) fields.issued_qty = issued;
-            if (cRec >= 0 || cIss >= 0) fields.balance_stock_qty = received - issued;
+          const fields = {
+            article_ref,
+            description: cDesc >= 0 ? String(r[cDesc] ?? "").trim() : ((existing && existing.description) || article_ref),
+            system_ref: cSys >= 0 ? String(r[cSys] ?? "").trim() : ((existing && existing.system_ref) || ""),
+            unit: cUnit >= 0 ? String(r[cUnit] ?? "").trim() : ((existing && existing.unit) || ""),
+            location: cLoc >= 0 ? String(r[cLoc] ?? "").trim() : ((existing && existing.location) || ""),
+            min_qty: cMin >= 0 ? num(r[cMin]) : num(existing && existing.min_qty),
+            updatedAt: serverTimestamp(),
+            updatedBy: this.displayName,
+          };
+          const received = cRec >= 0 ? num(r[cRec]) : num(existing && existing.received_qty);
+          const issued   = cIss >= 0 ? num(r[cIss]) : num(existing && existing.issued_qty);
+          if (cRec >= 0) fields.received_qty = received;
+          if (cIss >= 0) fields.issued_qty = issued;
+          if (cRec >= 0 || cIss >= 0) fields.balance_stock_qty = received - issued;
 
-            if (existing) {
-              batch.update(doc(db, collections.inventory, existing.id), fields);
-              updated++;
-            } else {
-              batch.set(doc(collection(db, collections.inventory)), {
-                received_qty: 0, issued_qty: 0, balance_stock_qty: 0, ...fields,
-                createdAt: serverTimestamp(), createdBy: this.displayName,
-              });
-              created++;
-            }
+          if (existing) {
+            batch.update(doc(db, collections.inventory, existing.id), fields);
+            updated++;
+          } else {
+            batch.set(doc(collection(db, collections.inventory)), {
+              received_qty: 0, issued_qty: 0, balance_stock_qty: 0, ...fields,
+              createdAt: serverTimestamp(), createdBy: this.displayName,
+            });
+            created++;
           }
-          this.track(batch.commit(), "the import");
         }
-        this.importOpen = false;
-        this.importText = "";
-        this.toast(this.savedMsg("Import complete — " + created + " created, " +
-                   updated + " updated" +
-                   (skipped ? ", " + skipped + " skipped" : "") + "."), "ok");
-      } catch (e) {
-        this.toast("Import failed: " + e.message, "err");
-      } finally { this.saving = false; }
+        this.track(batch.commit(), "the import");
+      }
+      this.importOpen = false;
+      this.importText = "";
+      this.toast(this.savedMsg("Stock list imported — " + created + " created, " +
+                 updated + " updated" +
+                 (skipped ? ", " + skipped + " skipped" : "") + "."), "ok");
+    },
+
+    /* ---- villa projects ------------------------------------------------ */
+    async importProjects(rows, col) {
+      const cCode = col("project_code", "project");
+      if (cCode < 0) { this.toast('CSV must contain a "project_code" column.', "err"); return; }
+      const cClient = col("client"), cStatus = col("status"), cNotes = col("notes", "note");
+
+      let created = 0, updated = 0, skipped = 0;
+      const batch = writeBatch(db);
+      const seen = new Set();
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        const code = String(r[cCode] ?? "").trim();
+        if (!code || seen.has(key(code))) { skipped++; continue; }
+        seen.add(key(code));
+        const existing = this.projects.find((p) => key(p.project_code) === key(code));
+        const fields = {
+          project_code: code,
+          client: cClient >= 0 ? String(r[cClient] ?? "").trim() : ((existing && existing.client) || ""),
+          status: cStatus >= 0 ? (String(r[cStatus] ?? "").trim() || "active") : ((existing && existing.status) || "active"),
+          notes: cNotes >= 0 ? String(r[cNotes] ?? "").trim() : ((existing && existing.notes) || ""),
+          updatedAt: serverTimestamp(), updatedBy: this.displayName,
+        };
+        if (existing) { batch.update(doc(db, collections.projects, existing.id), fields); updated++; }
+        else {
+          batch.set(doc(collection(db, collections.projects)),
+            { ...fields, createdAt: serverTimestamp(), createdBy: this.displayName });
+          created++;
+        }
+      }
+      this.track(batch.commit(), "the projects");
+      this.importOpen = false;
+      this.importText = "";
+      this.toast(this.savedMsg("Projects imported — " + created + " created, " +
+                 updated + " updated" + (skipped ? ", " + skipped + " skipped" : "") + "."), "ok");
+    },
+
+    /* ---- movement ledger ----------------------------------------------
+       Every row becomes a permanent ledger entry AND moves the article's
+       running totals, so balances stay derived from real movements rather
+       than typed in. Projects named in the file are created if missing.
+       An "import_tag" column makes the file self-identifying, so posting
+       the same file twice asks for confirmation first.
+    -------------------------------------------------------------------- */
+    async importMovements(rows, col) {
+      const cType = col("type"), cArt = col("article_ref", "articleref", "article", "code"),
+            cQty  = col("qty", "quantity"), cProj = col("project_code", "project"),
+            cNote = col("note", "notes"), cTag = col("import_tag", "tag");
+      if (cArt < 0) { this.toast('CSV must contain an "article_ref" column.', "err"); return; }
+
+      const tag = cTag >= 0 ? String(rows[1][cTag] ?? "").trim() : "";
+      if (tag && this.importsDone[tag]) {
+        const when = String(this.importsDone[tag]).slice(0, 10);
+        if (!confirm('"' + tag + '" was already imported on ' + when +
+                     ".\n\nPosting it again will DOUBLE every quantity in it.\n\nImport anyway?")) return;
+      }
+
+      const byArticle = new Map();
+      for (const i of this.inventory) byArticle.set(key(i.article_ref), i);
+
+      // Pass 1: parse, and work out which projects we are missing.
+      const parsed = [];
+      let skipped = 0, unknown = new Set();
+      const wantProjects = new Map();
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        const article_ref = String(r[cArt] ?? "").trim();
+        const qty = num(cQty >= 0 ? r[cQty] : 0);
+        let type = (cType >= 0 ? String(r[cType] ?? "") : "").trim().toLowerCase();
+        if (type === "receipt" || type === "received" || type === "in") type = "receive";
+        if (type === "issued" || type === "out") type = "issue";
+        if (!["receive", "issue", "adjust"].includes(type)) type = "receive";
+        if (!article_ref || !(qty > 0)) { skipped++; continue; }
+        const item = byArticle.get(key(article_ref));
+        if (!item) { skipped++; unknown.add(article_ref); continue; }
+        const code = cProj >= 0 ? String(r[cProj] ?? "").trim() : "";
+        if (code) wantProjects.set(key(code), code);
+        parsed.push({ item, type, qty, code,
+                      note: cNote >= 0 ? String(r[cNote] ?? "").trim() : "" });
+      }
+      if (!parsed.length) {
+        this.toast("Nothing to post — " + (unknown.size
+          ? unknown.size + " article code(s) in the file are not in the stock list. Import the stock list first."
+          : "no usable rows."), "err");
+        return;
+      }
+
+      if (!confirm("Post " + parsed.length + " movements to the ledger?\n\n" +
+                   "This writes permanent audit entries and moves every balance. " +
+                   "It cannot be undone from inside the app.")) return;
+
+      // Pass 2: create any missing projects, keeping their new ids to hand.
+      const projMap = new Map();
+      for (const p of this.projects) projMap.set(key(p.project_code), { id: p.id, project_code: p.project_code });
+      let newProjects = 0;
+      const pre = writeBatch(db);
+      for (const [k, code] of wantProjects) {
+        if (projMap.has(k)) continue;
+        const ref = doc(collection(db, collections.projects));
+        pre.set(ref, { project_code: code, client: "", status: "active",
+                       notes: "Created by import", createdAt: serverTimestamp(),
+                       createdBy: this.displayName });
+        projMap.set(k, { id: ref.id, project_code: code });
+        newProjects++;
+      }
+      if (newProjects) this.track(pre.commit(), "the projects");
+
+      // Pass 3: post the ledger in chunks, folding each article's moves into
+      // a single atomic increment per chunk.
+      for (let i = 0; i < parsed.length; i += 200) {
+        const chunk = parsed.slice(i, i + 200);
+        const batch = writeBatch(db);
+        const delta = new Map();
+        for (const m of chunk) {
+          const project = m.code ? projMap.get(key(m.code)) : null;
+          batch.set(doc(collection(db, collections.movements)), {
+            item_id: m.item.id, article_ref: m.item.article_ref,
+            description: m.item.description || "", system_ref: m.item.system_ref || "",
+            type: m.type, qty: m.qty,
+            project_id: (project && project.id) || "",
+            project_code: (project && project.project_code) || "",
+            note: m.note, at: serverTimestamp(),
+            by: this.authUser.uid, by_name: this.displayName,
+          });
+          const d = delta.get(m.item.id) || { rec: 0, iss: 0 };
+          if (m.type === "issue") d.iss += m.qty; else d.rec += m.qty;
+          delta.set(m.item.id, d);
+        }
+        for (const [id, d] of delta) {
+          batch.update(doc(db, collections.inventory, id), {
+            received_qty: increment(d.rec),
+            issued_qty: increment(d.iss),
+            balance_stock_qty: increment(d.rec - d.iss),
+            updatedAt: serverTimestamp(), updatedBy: this.displayName,
+          });
+        }
+        this.track(batch.commit(), "the movements");
+      }
+
+      if (tag) {
+        this.track(setDoc(doc(db, collections.settings, "imports"),
+          { [tag]: new Date().toISOString() }, { merge: true }), "the import record");
+      }
+
+      this.importOpen = false;
+      this.importText = "";
+      this.toast(this.savedMsg("Ledger imported — " + parsed.length + " movements posted" +
+                 (newProjects ? ", " + newProjects + " projects created" : "") +
+                 (skipped ? ", " + skipped + " rows skipped" : "") + "."), "ok");
+      if (unknown.size) {
+        this.toast(unknown.size + " article code(s) were not in the stock list and were skipped: " +
+                   [...unknown].slice(0, 5).join(", ") + (unknown.size > 5 ? "…" : ""), "err");
+      }
     },
   }));
 });

@@ -63,6 +63,7 @@ so simultaneous postings both count and everyone sees the result immediately.
 | `manifest.json` | PWA manifest (name, icons, standalone display). |
 | `sw.js` | Service worker — offline app shell, versioned cache. |
 | `icons/` | App icons (192, 512, maskable). |
+| `import/` | Your master stock list, converted to CSV ready to import. |
 | `README.md` | This file. |
 
 ---
@@ -170,16 +171,56 @@ user and time. Ledger rows cannot be edited or deleted — the rules forbid it f
 everyone. Corrections are made by posting an opposing movement, which is the
 only defensible behaviour for stock control.
 
-**Import CSV** loads your existing Schüco article list. Header row required;
-spacing and camelCase are tolerated:
+**Import CSV** loads three different kinds of file. It works out which from the
+header row, so there is one button, not three. Spacing and camelCase are
+tolerated everywhere.
+
+*Stock list* — the article register. Matching is on `article_ref`: existing
+codes are updated, new ones created, duplicates within one file skipped.
 
 ```
-system_ref,article_ref,description,unit,location,min_qty,received_qty,issued_qty
-ADS / AWS 65,391440,INNER PROFILE 69 (319760) ( I ),bars,Rack A3,20,273,17
+article_ref,description,system_ref,unit,location,min_qty,received_qty,issued_qty
+391440,INNER PROFILE 69 (319760) ( I ),ADS / AWS 65,BAR,Rack A3,20,273,17
 ```
 
-Matching is on `article_ref` — existing codes are updated, new ones created, and
-duplicates within one file are skipped.
+*Projects* — recognised by having `project_code` and no `article_ref`.
+
+```
+project_code,client,status,notes
+1361 - C35,,active,
+```
+
+*Movements* — recognised by having `type` and `qty`. Every row becomes a
+permanent ledger entry **and** moves that article's running totals, so the
+balances stay derived from real movements rather than typed in. Projects named
+in the file are created if they do not exist. Articles that are not already in
+the stock list are skipped and reported, so import the stock list first.
+
+```
+type,article_ref,qty,project_code,note,import_tag
+receive,391440,273,,DN PSL076805,master-stock-list-23-09
+issue,391440,22,1361 - C35,Allocated to 1361 - C35,master-stock-list-23-09
+```
+
+The optional `import_tag` makes a movements file self-identifying. The app
+records the tags it has posted, so pasting the same file a second time warns you
+before it doubles every quantity in it.
+
+### Loading the master stock list
+
+The `import/` folder holds your 23-09 master stock list already converted.
+Import them **in this order**, from Master Stock › Import CSV:
+
+1. `import-1-stock.csv` — 729 articles across 14 systems.
+2. `import-2-projects.csv` — the 12 villa projects.
+3. `import-3-movements.csv` — 2,229 ledger entries (870 receipts tagged with
+   their delivery note, 1,359 issues tagged with their project). This one takes
+   about half a minute and asks you to confirm first.
+
+`check-negative-balances.csv` is not imported. It lists the 122 articles that
+finish below zero because the sheet records material issued to a job that was
+never booked in against a delivery note. Book those deliveries and the balances
+right themselves.
 
 **Load sample data** (Settings, or the empty-state button) inserts the eight
 Schüco articles and three villa projects from your prototype.
@@ -197,7 +238,23 @@ roller-set line at 1,760 pieces and a corner cleat at 18 cannot share a trigger
 point.
 
 **Villa Project Summaries** aggregates every issue booked to a job into one row
-per article.
+per article. Every movement is loaded for these totals to be complete; the
+ledger table itself draws 300 rows at a time so a long history does not slow the
+page down.
+
+**System names.** The master stock list spelled three systems differently from
+the way you name them, so the import CSV was normalised: `ASE 55` is imported as
+`ASE 55 Lift & Slide`, and `AS FD 90 HI BI-FOLDING` as `AS FD 90 HI`. CW stands
+for curtain wall, and `ASE 80 L & S + CW` is imported as
+`ASE 80 Lift & Slide + CW` — a combined lift & slide plus curtain wall, kept as
+a system of its own rather than folded into `ASE 80 Lift & Slide`.
+
+**System references offered when you type one** are every system that carries
+stock, plus the list in `knownSystems` in `firebase-config.js`. That is how a
+BOM template can name a system before any stock carries it — edit the array and
+redeploy to add more. The "Seed from a system group" picker and the stock filter
+deliberately show only systems that have stock, since seeding from an empty one
+would produce nothing.
 
 ---
 
