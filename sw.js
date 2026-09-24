@@ -12,7 +12,7 @@
    Bump CACHE_VERSION on every deploy so clients pick up new code.
 --------------------------------------------------------------------------- */
 
-const CACHE_VERSION = "eurolux-v4.0.1";
+const CACHE_VERSION = "eurolux-v4.20.0";
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const VENDOR_CACHE = `${CACHE_VERSION}-vendor`;
 
