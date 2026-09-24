@@ -271,6 +271,10 @@ Hardware, Accessories and Gaskets sections wherever they sit, matches every
 article against your stock list, and shows you what it will deduct before
 anything moves.
 
+An MTO has to be booked to a job that already exists, so if the file names a job
+you do not have, the app asks you to create it before anything can be deducted,
+and selects it for you once saved.
+
 Two quantities sit on every MTO line, and they are in different units:
 
 | MTO column | What it means | Used for |
@@ -307,10 +311,17 @@ together. If a line would take an article below zero the app says so before you
 post, and still lets you post it, because the ledger records what really
 happened.
 
-**Reports** has two.
+The search box in the top bar searches whichever page you are on — the stock
+list, the ledger, a report, or jobs and their booked items. From a page that
+cannot show results it takes you to the stock list rather than doing nothing.
+
+**Reports** has three.
 
 *Stock by system* groups every article under its system, with received, issued,
 balance, minimum and status per line. Click a system heading to open it.
+
+*Negative* lists articles issued beyond what was ever received — nearly always
+a delivery note that was never booked in.
 
 *Below minimum* is the replenishment report: everything at or below its minimum,
 worst first, with how much to order and a Receive button on each row. **Set
@@ -319,10 +330,14 @@ article at a time is unusable across a list this size. Tick "only articles that
 have no minimum set yet" to fill the gaps without overwriting minimums you have
 already tuned.
 
-Both reports export to CSV.
+All three export to CSV, and the four tiles at the top are clickable: Systems
+expands or collapses every group, On Hand opens the stock list, and Below
+Minimum and Negative switch to those reports.
 
-**Villa Project Summaries** aggregates every issue booked to a job into one row
-per article. Every movement is loaded for these totals to be complete; the
+**Villa Project Summaries** lists every job collapsed, with its total and article
+count; the **+** beside a job opens its booked items. Create a job from the
+**New job** button in the top bar, on the dashboard, or on this page, and book
+material to it whenever you are ready. Every movement is loaded for these totals to be complete; the
 ledger table itself draws 300 rows at a time so a long history does not slow the
 page down.
 

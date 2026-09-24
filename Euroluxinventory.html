@@ -81,7 +81,10 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em}
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='none' stroke='%2393a4bd' stroke-width='1.6' d='M1 1.5l5 5 5-5'/></svg>");
   background-repeat:no-repeat;background-position:right .7rem center;padding-right:2rem}
 .textarea{resize:vertical;min-height:72px}
-.hint{font-size:.75rem;color:var(--faint)}
+.hint{font-size:.75rem;color:var(--faint);line-height:1.5}
+/* Two stacked field grids need breathing room, or a wrapped hint in the first
+   one runs straight into the label beneath it. */
+.grid-2 + .grid-2{margin-top:1rem}
 
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
 .card-pad{padding:1.1rem 1.25rem}
@@ -144,6 +147,15 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em}
 .search .input{padding-left:2.2rem}
 .search svg{position:absolute;left:.7rem;top:50%;transform:translateY(-50%);color:var(--faint)}
 .view{flex:1;overflow-y:auto;padding:1.5rem;-webkit-overflow-scrolling:touch}
+.expander{
+  flex:none;width:28px;height:28px;border-radius:8px;border:1px solid var(--line);
+  background:var(--panel-2);color:var(--accent);font-size:1.05rem;font-weight:700;line-height:1;
+  cursor:pointer;display:flex;align-items:center;justify-content:center}
+.expander:hover{border-color:var(--accent)}
+.kpi-link{cursor:pointer;transition:border-color .12s ease,transform .12s ease}
+.kpi-link:hover{border-color:var(--accent);transform:translateY(-1px)}
+.kpi-link:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.kpi-hint{font-size:.68rem;color:var(--accent);margin-top:.35rem;font-weight:600;letter-spacing:.04em}
 .app-footnote{
   margin-top:2rem;padding:1rem 0 .25rem;border-top:1px solid var(--line);
   text-align:center;font-size:.76rem;line-height:1.6;color:var(--faint);
@@ -456,11 +468,15 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
         <div class="search">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-          <input class="input" type="search" x-model="searchQuery"
-                 placeholder="Search article code, description or system…">
+          <input class="input" type="search" x-model="searchQuery" @input="onSearch()"
+                 :placeholder="searchPlaceholder">
         </div>
 
         <div style="flex:1"></div>
+
+        <button class="btn btn-sm" @click="openProject()" title="Create a job to book material against later">
+          New job
+        </button>
 
         <span class="pill" :class="shortageCount ? 'pill-warn' : 'pill-good'" style="cursor:pointer"
               role="button" tabindex="0" @click="report='low'; go('reports')"
@@ -494,6 +510,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
             </div>
             <div class="actions">
               <button class="btn btn-sm" @click="go('wizard')">BOM wizard</button>
+              <button class="btn btn-sm btn-primary" @click="openProject()">New job</button>
               <button class="btn btn-sm" @click="openBooking()" :disabled="!inventory.length">Book to a job</button>
               <button class="btn btn-sm" @click="report='low'; go('reports')">Replenishment report</button>
               <button class="btn btn-sm btn-primary" @click="openItem()">Add profile</button>
@@ -1009,17 +1026,27 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
             </div>
           </template>
 
-          <template x-for="p in projects" :key="p.id">
+          <template x-for="p in visibleProjects" :key="p.id">
             <div class="card">
               <div class="card-pad" style="border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap">
+                <div style="min-width:0;display:flex;gap:.75rem;align-items:flex-start">
+                  <button type="button" class="expander" @click="toggleProject(p.id)"
+                          :aria-expanded="openProjects[p.id] ? 'true' : 'false'"
+                          :title="openProjects[p.id] ? 'Hide booked items' : 'Show booked items'"
+                          x-text="openProjects[p.id] ? '\u2212' : '+'"></button>
                 <div style="min-width:0">
                   <div class="row" style="gap:.6rem">
-                    <h3 style="font-size:1rem" x-text="p.project_code"></h3>
+                    <h3 style="font-size:1rem;cursor:pointer" @click="toggleProject(p.id)"
+                        x-text="p.project_code"></h3>
                     <span class="pill"
                           :class="p.status==='complete' ? 'pill-good' : (p.status==='on hold' ? 'pill-warn' : 'pill-info')"
                           x-text="p.status || 'active'"></span>
                   </div>
-                  <p class="view-sub" x-text="[p.client, p.notes].filter(Boolean).join(' · ') || 'No client recorded'"></p>
+                  <p class="view-sub"
+                     x-text="[p.client, p.notes].filter(Boolean).join(' \u00b7 ') || 'No client recorded'"></p>
+                  <p class="faint" style="font-size:.76rem"
+                     x-text="`${fmt(projectLines(p.id).length)} article(s) booked`"></p>
+                </div>
                 </div>
                 <div class="row">
                   <div class="right" style="margin-right:.5rem">
@@ -1034,10 +1061,10 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                 </div>
               </div>
 
-              <template x-if="!projectLines(p.id).length">
-                <div class="empty" style="padding:1.6rem">Nothing booked to this project yet.</div>
+              <template x-if="openProjects[p.id] && !projectLines(p.id).length">
+                <div class="empty" style="padding:1.6rem">Nothing booked to this job yet.</div>
               </template>
-              <template x-if="projectLines(p.id).length">
+              <template x-if="openProjects[p.id] && projectLines(p.id).length">
                 <div class="table-wrap" style="border:none;border-radius:0">
                   <table>
                     <thead><tr>
@@ -1137,20 +1164,13 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                   <div class="grid-2" style="margin-top:1rem">
                     <div class="field">
                       <label class="label">Book to job *</label>
-                      <select id="mto-project" class="select" x-show="!mtoNewProject" x-model="mto.projectId"
-                              @change="mto.projectId==='__new' && (mtoNewProject=true, mto.projectId='')">
+                      <select id="mto-project" class="select" x-model="mto.projectId">
                         <option value="">&mdash; Choose a job &mdash;</option>
                         <template x-for="p in projects" :key="p.id">
                           <option :value="p.id" x-text="p.project_code"></option>
                         </template>
-                        <option value="__new">+ Create a new job&hellip;</option>
                       </select>
-                      <div class="row" x-show="mtoNewProject" style="gap:.4rem">
-                        <input class="input" x-model.trim="mto.newProject" placeholder="Job name">
-                        <button type="button" class="btn btn-sm"
-                                @click="mtoNewProject=false; mto.newProject=''">Cancel</button>
-                      </div>
-                      <span class="hint" x-show="mtoNewProject && mto.newProject">Taken from the file &mdash; edit if your job is named differently.</span>
+                      <span class="hint" x-show="!mto.projectId">Pick the job, or create it below.</span>
                     </div>
                     <div class="field">
                       <label class="label">Draw from *</label>
@@ -1180,6 +1200,25 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                   </div>
                 </div>
               </div>
+
+              <template x-if="!mto.projectId">
+                <div class="banner banner-warn">
+                  <div style="width:100%">
+                    <strong>Which job is this MTO for?</strong>
+                    <span x-show="mto.project">
+                      The file says <span class="mono" x-text="mto.project"></span>.
+                    </span>
+                    Nothing can be deducted until you pick a job, or create one.
+                    <div class="row" style="margin-top:.6rem">
+                      <button class="btn btn-sm btn-primary" @click="openProject(null, mto.project)">
+                        Create the job
+                      </button>
+                      <span class="faint" style="font-size:.8rem" x-show="projects.length"
+                            x-text="`\u2026 or choose one of your ${fmt(projects.length)} existing jobs above.`"></span>
+                    </div>
+                  </div>
+                </div>
+              </template>
 
               <template x-if="mtoMissing.length">
                 <div class="banner banner-warn">
@@ -1244,7 +1283,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                         x-text="`${fmt(mtoActive.length)} line(s) will post` +
                                 (mtoVisible.length !== mto.lines.length ? ` · showing ${fmt(mtoVisible.length)} of ${fmt(mto.lines.length)}` : '')"></span>
                   <button class="btn btn-primary" @click="postMto()"
-                          :disabled="mtoPosting || !mtoActive.length || !mto.system || (!mto.projectId && !mto.newProject)">
+                          :disabled="mtoPosting || !mtoActive.length || !mto.system || !mto.projectId">
                     <span x-show="mtoPosting" class="spinner"></span><span>Deduct from stock</span>
                   </button>
                 </div>
@@ -1272,8 +1311,9 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
               <div class="seg">
                 <button :class="report==='stock' && 'on'" @click="report='stock'">Stock by system</button>
                 <button :class="report==='low' && 'on'" @click="report='low'">Below minimum</button>
+                <button :class="report==='negative' && 'on'" @click="report='negative'">Negative</button>
               </div>
-              <button class="btn btn-sm" @click="report==='stock' ? exportStockReport() : exportLowReport()"
+              <button class="btn btn-sm" @click="exportReport()"
                       :disabled="!inventory.length">Export CSV</button>
             </div>
           </div>
@@ -1290,25 +1330,33 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
 
               <template x-if="inventory.length">
                 <div class="kpis">
-                  <div class="kpi">
+                  <div class="kpi kpi-link" role="button" tabindex="0"
+                       @click="toggleAllGroups()" @keydown.enter="toggleAllGroups()">
                     <div class="kpi-label">Systems</div>
                     <div class="kpi-value" x-text="fmt(systemSummary.length)"></div>
-                    <div class="kpi-foot" x-text="`${fmt(inventory.length)} articles in total`"></div>
+                    <div class="kpi-foot" x-text="`${fmt(holdingInventory.length)} articles in ${holdingLabel}`"></div>
+                    <div class="kpi-hint" x-text="allGroupsOpen ? 'COLLAPSE ALL' : 'EXPAND ALL'"></div>
                   </div>
-                  <div class="kpi">
+                  <div class="kpi kpi-link" role="button" tabindex="0"
+                       @click="go('inventory')" @keydown.enter="go('inventory')">
                     <div class="kpi-label">On Hand</div>
                     <div class="kpi-value" style="color:var(--good)" x-text="fmt(totals.balance)"></div>
                     <div class="kpi-foot">received less issued</div>
+                    <div class="kpi-hint">OPEN THE STOCK LIST</div>
                   </div>
-                  <div class="kpi">
+                  <div class="kpi kpi-link" role="button" tabindex="0"
+                       @click="report='low'" @keydown.enter="report='low'">
                     <div class="kpi-label">Below Minimum</div>
                     <div class="kpi-value" :style="shortageCount ? 'color:var(--bad)' : ''" x-text="fmt(shortageCount)"></div>
                     <div class="kpi-foot">articles needing replenishment</div>
+                    <div class="kpi-hint">SHOW THEM</div>
                   </div>
-                  <div class="kpi">
+                  <div class="kpi kpi-link" role="button" tabindex="0"
+                       @click="report='negative'" @keydown.enter="report='negative'">
                     <div class="kpi-label">Negative</div>
                     <div class="kpi-value" :style="negativeCount ? 'color:var(--bad)' : ''" x-text="fmt(negativeCount)"></div>
                     <div class="kpi-foot">issued more than was received</div>
+                    <div class="kpi-hint">SHOW THEM</div>
                   </div>
                 </div>
               </template>
@@ -1365,37 +1413,46 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
           </template>
 
           <!-- ---- below minimum ---- -->
-          <template x-if="report==='low'">
+          <template x-if="report==='low' || report==='negative'">
             <div class="stack">
               <div class="card">
                 <div class="card-pad" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
                   <div>
-                    <h3 style="font-size:.95rem">Replenishment report</h3>
-                    <p class="view-sub"
-                       x-text="`${fmt(shortageCount)} of ${fmt(inventory.length)} articles are at or below their minimum. Default minimum is ${fmt(settings.shortageThreshold)} where no article minimum is set.`"></p>
+                    <h3 style="font-size:.95rem"
+                        x-text="report==='negative' ? 'Negative balances' : 'Replenishment report'"></h3>
+                    <p class="view-sub" x-show="report==='low'"
+                       x-text="`${fmt(shortageCount)} of ${fmt(holdingInventory.length)} articles in ${holdingLabel} are at or below their minimum. Default minimum is ${fmt(settings.shortageThreshold)} where no article minimum is set.`"></p>
+                    <p class="view-sub" x-show="report==='negative'"
+                       x-text="`${fmt(negativeCount)} article(s) in ${holdingLabel} have been issued more than was ever received \u2014 usually a delivery note that was never booked in.`"></p>
                   </div>
-                  <button class="btn btn-sm" @click="openLevels()">Set minimum levels</button>
+                  <div class="row">
+                    <button class="btn btn-sm" x-show="report==='low'" @click="openLevels()">Set minimum levels</button>
+                  </div>
                 </div>
               </div>
 
-              <template x-if="!shortageItems.length">
+              <template x-if="!reportRows.length">
                 <div class="card empty">
-                  <div class="empty-title">Nothing below its minimum</div>
-                  <div>Every article is above its reorder level.</div>
+                  <div class="empty-title"
+                       x-text="report==='negative' ? 'Nothing is negative' : 'Nothing below its minimum'"></div>
+                  <div x-text="searchQuery ? 'Nothing matches your search here.' : (report==='negative' ? 'Every balance is zero or above.' : 'Every article is above its reorder level.')"></div>
                 </div>
               </template>
 
-              <template x-if="shortageItems.length">
+              <template x-if="reportRows.length">
                 <div class="table-wrap">
                   <table>
                     <thead><tr>
+                      <th x-show="selectedHolding==='ALL'">Held for</th>
                       <th>System</th><th>Article</th><th>Description</th><th>Unit</th>
                       <th class="right">Balance</th><th class="right">Minimum</th>
                       <th class="right">Order at least</th><th>Status</th><th class="right">Actions</th>
                     </tr></thead>
                     <tbody>
-                      <template x-for="i in shortageItems" :key="i.id">
+                      <template x-for="i in reportRows" :key="i.id">
                         <tr class="row-bad">
+                          <td class="faint truncate" style="max-width:140px" x-show="selectedHolding==='ALL'"
+                              x-text="holdingOf(i)"></td>
                           <td class="muted truncate" style="max-width:190px" x-text="i.system_ref || '—'"></td>
                           <td class="mono" style="color:var(--accent);font-weight:700" x-text="i.article_ref"></td>
                           <td x-text="i.description"></td>
@@ -2341,9 +2398,10 @@ document.addEventListener("alpine:init", () => {
     itemSystemNew: false, bomSystemNew: false,
     report: "stock", openGroups: {},
     selectedHolding: "Stock",
+    openProjects: {},
     mto: { fileName: "", project: "", dated: "", lines: [], system: "", systemGuessed: false,
-           holding: "Stock", projectId: "", newProject: "", note: "", tag: "" },
-    mtoBusy: false, mtoPosting: false, mtoNewProject: false, mtoSearch: "",
+           holding: "Stock", projectId: "", note: "", tag: "" },
+    mtoBusy: false, mtoPosting: false, mtoSearch: "",
     bookOpen: false, bookNewProject: false, bookSearch: "",
     book: { projectId: "", newProject: "", system: "", holding: "Stock", note: "", picked: {} },
     levelsOpen: false, levelsForm: { system: "", value: 0, onlyBlank: true },
@@ -2492,18 +2550,48 @@ document.addEventListener("alpine:init", () => {
       return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
     },
     get shortageItems() {
+      const q = key(this.searchQuery);
       return this.holdingInventory
         .filter((i) => this.isShort(i))
+        .filter((i) => !q || [i.article_ref, i.description, i.system_ref, i.unit]
+          .map((v) => String(v ?? "")).join(" ").toLowerCase().includes(q))
         .sort((a, b) =>
           (this.reorderLevel(b) - this.balanceOf(b)) - (this.reorderLevel(a) - this.balanceOf(a)));
     },
     get shortageCount() { return this.shortageItems.length; },
+    /* Articles issued beyond what was received, newest problem first. */
+    get negativeItems() {
+      const q = key(this.searchQuery);
+      return this.holdingInventory
+        .filter((i) => this.balanceOf(i) < 0)
+        .filter((i) => !q || [i.article_ref, i.description, i.system_ref, i.unit]
+          .map((v) => String(v ?? "")).join(" ").toLowerCase().includes(q))
+        .sort((a, b) => this.balanceOf(a) - this.balanceOf(b));
+    },
+    get reportRows() {
+      return this.report === "negative" ? this.negativeItems : this.shortageItems;
+    },
+    get allGroupsOpen() {
+      return this.systemSummary.length > 0 &&
+             this.systemSummary.every((g) => this.openGroups[g.name]);
+    },
+    toggleAllGroups() {
+      const open = !this.allGroupsOpen;
+      for (const g of this.systemSummary) this.openGroups[g.name] = open;
+    },
+    exportReport() {
+      if (this.report === "stock") return this.exportStockReport();
+      return this.exportLowReport();
+    },
     get negativeCount() { return this.holdingInventory.filter((i) => this.balanceOf(i) < 0).length; },
 
     /* Every article in one system, ordered by code, for the Reports drill-down. */
     systemItems(name) {
+      const q = key(this.searchQuery);
       return this.holdingInventory
         .filter((i) => (i.system_ref || "(no system)") === name)
+        .filter((i) => !q || [i.article_ref, i.description, i.unit, i.location]
+          .map((v) => String(v ?? "")).join(" ").toLowerCase().includes(q))
         .sort((a, b) => String(a.article_ref)
           .localeCompare(String(b.article_ref), undefined, { numeric: true }));
     },
@@ -2527,20 +2615,21 @@ document.addEventListener("alpine:init", () => {
     exportLowReport() {
       const rows = [["holding", "system_ref", "article_ref", "description", "unit",
                      "balance_stock_qty", "minimum_level", "order_at_least", "status"]];
-      for (const i of this.shortageItems) {
+      for (const i of this.reportRows) {
         const bal = this.balanceOf(i), min = this.reorderLevel(i);
         rows.push([this.holdingOf(i), i.system_ref || "", i.article_ref, i.description, i.unit || "",
                    bal, min, Math.max(0, min - bal), this.statusLabel(i)]);
       }
-      if (rows.length === 1) { this.toast("Nothing is below its minimum.", "err"); return; }
-      downloadCsv(rows, "eurolux-below-minimum-" + new Date().toISOString().slice(0, 10) + ".csv");
+      if (rows.length === 1) { this.toast("Nothing to export here.", "err"); return; }
+      downloadCsv(rows, "eurolux-" + (this.report === "negative" ? "negative" : "below-minimum") +
+                  "-" + new Date().toISOString().slice(0, 10) + ".csv");
     },
 
     /* ---- MTO import ------------------------------------------------------ */
     clearMto() {
       this.mto = { fileName: "", project: "", dated: "", lines: [], system: "", systemGuessed: false,
-                   holding: "Stock", projectId: "", newProject: "", note: "", tag: "" };
-      this.mtoNewProject = false; this.mtoSearch = "";
+                   holding: "Stock", projectId: "", note: "", tag: "" };
+      this.mtoSearch = "";
     },
     /* Resolve an MTO line against the holding it is being drawn from. */
     mtoItem(article) {
@@ -2601,14 +2690,14 @@ document.addEventListener("alpine:init", () => {
         this.mto = {
           fileName: file.name, project: parsed.project, dated: parsed.dated,
           lines: parsed.lines, system, systemGuessed: guessed,
-          holding: "Stock", projectId: "", newProject: "", note: "",
+          holding: "Stock", projectId: "", note: "",
           tag: "MTO:" + (parsed.project || file.name),
         };
 
-        // Prefill the job: match the file's project against the jobs you have.
+        // Select the matching job if you already have one; otherwise leave it
+        // empty so the banner asks you to create it.
         const match = this.projects.find((p) => key(p.project_code) === key(parsed.project));
-        if (match) { this.mto.projectId = match.id; this.mtoNewProject = false; }
-        else if (parsed.project) { this.mtoNewProject = true; this.mto.newProject = parsed.project; }
+        if (match) this.mto.projectId = match.id;
 
         if (this.mto.tag && this.importsDone[this.mto.tag]) {
           this.toast('"' + (parsed.project || file.name) + '" was already deducted on ' +
@@ -2626,11 +2715,9 @@ document.addEventListener("alpine:init", () => {
       const lines = this.mtoActive;
       if (!lines.length || !this.mto.system) return;
 
-      let project = this.projects.find((p) => p.id === this.mto.projectId) || null;
-      const newName = String(this.mto.newProject || "").trim();
-      if (!project && !newName) { this.toast("Choose a job, or create one.", "err"); return; }
-      if (!project && this.projects.some((p) => key(p.project_code) === key(newName))) {
-        this.toast('A job called "' + newName + '" already exists. Pick it from the list.', "err");
+      const project = this.projects.find((p) => p.id === this.mto.projectId) || null;
+      if (!project) {
+        this.toast("Choose the job this MTO is for, or create it first.", "err");
         return;
       }
       if (this.mto.tag && this.importsDone[this.mto.tag] &&
@@ -2640,22 +2727,14 @@ document.addEventListener("alpine:init", () => {
 
       const missing = this.mtoMissing.filter((l) => num(l.deduct) > 0);
       if (!confirm("Deduct " + lines.length + " line(s) from stock for " +
-                   (project ? project.project_code : newName) + " / " + this.mto.system + "?" +
+                   project.project_code + " / " + this.mto.system + "?" +
                    (missing.length ? "\n\n" + missing.length + " article(s) will be created at zero and go negative." : "") +
                    "\n\nThis posts to the ledger and cannot be undone from inside the app.")) return;
 
       this.mtoPosting = true;
       try {
-        let projectId, projectCode;
+        const projectId = project.id, projectCode = project.project_code;
         const first = writeBatch(db);
-        if (project) { projectId = project.id; projectCode = project.project_code; }
-        else {
-          const ref = doc(collection(db, collections.projects));
-          first.set(ref, { project_code: newName, client: "", status: "active",
-                           notes: "Created by MTO import", createdAt: serverTimestamp(),
-                           createdBy: this.displayName });
-          projectId = ref.id; projectCode = newName;
-        }
 
         // Articles the MTO names that we have never stocked.
         const created = new Map();
@@ -2673,7 +2752,7 @@ document.addEventListener("alpine:init", () => {
           });
           created.set(key(l.art), ref.id);
         }
-        this.track(first.commit(), project && !created.size ? "the job" : "the new articles");
+        if (created.size) this.track(first.commit(), "the new articles");
 
         const note = ["MTO", this.mto.project || this.mto.fileName, this.mto.note]
           .filter(Boolean).join(" \u2014 ");
@@ -3085,6 +3164,22 @@ document.addEventListener("alpine:init", () => {
       this.searchQuery = "";
       this.go("inventory");
     },
+    /* The search box sits in the top bar on every page, so it has to do
+       something on every page. Views that can show results filter themselves;
+       from anywhere else, typing takes you to the stock list. */
+    get searchableTab() {
+      return ["inventory", "movements", "reports", "projects"].includes(this.currentTab);
+    },
+    get searchPlaceholder() {
+      const where = { inventory: "the stock list", movements: "the ledger",
+                      reports: "this report", projects: "jobs and booked items" };
+      return this.searchableTab
+        ? "Search " + where[this.currentTab] + "\u2026"
+        : "Search article code, description or system\u2026";
+    },
+    onSearch() {
+      if (this.searchQuery.trim() && !this.searchableTab) this.go("inventory");
+    },
     go(tab) {
       this.currentTab = tab;
       this.menuOpen = false;
@@ -3152,6 +3247,20 @@ document.addEventListener("alpine:init", () => {
       return this.online
         ? text
         : text + " Saved on this device \u2014 it will sync when you are back online.";
+    },
+
+    toggleProject(id) { this.openProjects[id] = !this.openProjects[id]; },
+    /* Jobs matching the search box, so the top-bar search works here too. */
+    get visibleProjects() {
+      const q = key(this.searchQuery);
+      if (!q) return this.projects;
+      return this.projects.filter((p) => {
+        if ([p.project_code, p.client, p.notes].map((v) => String(v ?? ""))
+            .join(" ").toLowerCase().includes(q)) return true;
+        return this.projectLines(p.id).some((l) =>
+          [l.article_ref, l.description, l.system_ref].map((v) => String(v ?? ""))
+            .join(" ").toLowerCase().includes(q));
+      });
     },
 
     /* Aggregated per-article booking lines for one project. */
@@ -3398,10 +3507,10 @@ document.addEventListener("alpine:init", () => {
     },
 
     /* ---------------- projects ---------------- */
-    openProject(p = null) {
+    openProject(p = null, seedName = "") {
       this.projectForm = p
         ? { ...p }
-        : { project_code: "", client: "", status: "active", notes: "" };
+        : { project_code: seedName || "", client: "", status: "active", notes: "" };
       this.projectOpen = true;
     },
     async saveProject() {
@@ -3415,14 +3524,24 @@ document.addEventListener("alpine:init", () => {
           status: f.status || "active", notes: f.notes || "",
           updatedAt: serverTimestamp(), updatedBy: this.displayName,
         };
-        this.track(
-          f.id
-            ? updateDoc(doc(db, collections.projects, f.id), data)
-            : setDoc(doc(collection(db, collections.projects)),
-                     { ...data, createdAt: serverTimestamp() }),
-          "the project");
+        let newId = "";
+        if (f.id) {
+          this.track(updateDoc(doc(db, collections.projects, f.id), data), "the job");
+        } else {
+          const ref = doc(collection(db, collections.projects));
+          newId = ref.id;
+          this.track(setDoc(ref, { ...data, createdAt: serverTimestamp() }), "the job");
+        }
         this.projectOpen = false;
-        this.toast(this.savedMsg("Project saved."), "ok");
+
+        /* If an MTO is waiting for a job, select the one just created so the
+           user does not have to go and find it in the list. */
+        if (newId && this.currentTab === "mto" && this.mto.lines.length && !this.mto.projectId) {
+          this.mto.projectId = newId;
+        }
+        if (newId && this.bookOpen && !this.book.projectId) this.book.projectId = newId;
+
+        this.toast(this.savedMsg('Job "' + f.project_code + '" saved.'), "ok");
       } catch (e) {
         this.toast("Could not save project: " + e.message, "err");
       } finally { this.saving = false; }
