@@ -157,6 +157,25 @@ sign in. Everything after that works offline.
 
 ## Using it
 
+### Two holdings
+
+Stock lives in two kinds of place, exactly as your master workbook keeps it:
+
+- **Main stock** — the warehouse. Free to use on any job.
+- **Allocated to a villa** — material bought against one named job. It is *not*
+  available to another job.
+
+The same article can sit in both at once, so a stock record is keyed by article
+**and** holding. The selector at the top of Master Stock and Reports chooses
+which you are looking at; it opens on main stock. "Held for" appears as a column
+when you switch to **All holdings**, and on every ledger row as **From**.
+
+Booking and the MTO import both ask which holding to draw from, rather than
+guessing, because holding names ("Villa 80 - ST3, Esmeralda") and job codes
+("1369-Esmeralda") are not the same strings.
+
+---
+
 **Master Stock Control** — the article register. Each profile has a received
 total, an issued total, and a balance that is always `received − issued`. You
 never type the balance; it follows from the movements, which is what makes the
@@ -232,10 +251,61 @@ correct numbers rather than typing the bundle. Pick the template, the number of
 units and a villa project, and it shows required vs. on-hand vs. shortfall per
 line before **Batch book package bundle** posts the lot.
 
+**MTO Import** reads the *Material analysis* spreadsheet Logikal exports for a
+job and books the whole thing off stock in one posting. It finds the Profiles,
+Hardware, Accessories and Gaskets sections wherever they sit, matches every
+article against your stock list, and shows you what it will deduct before
+anything moves.
+
+Two quantities sit on every MTO line, and they are in different units:
+
+| MTO column | What it means | Used for |
+|---|---|---|
+| Quantity | purchase units — whole bars for profiles, packs for the rest | **profiles** |
+| Required | net consumption — metres, pieces or pairs | **everything else** |
+
+Profiles are stocked as bars, so a profile line deducts the bar count the
+optimiser worked out. Hardware, accessories and gaskets are counted in pieces,
+metres and pairs, so those lines deduct the Required figure. Every line stays
+editable, and setting one to zero leaves it out. Articles the MTO names that you
+have never stocked are created at zero and go negative, so the job's real
+consumption is still recorded. Each file is tagged, so loading the same MTO
+twice warns you before it doubles anything.
+
+The **cutting list** and **assembly list** PDFs are per-cut and per-position
+detail of the same job — useful on the saw and the bench, but the material
+analysis is the one that carries project totals, so that is what the app reads.
+
+**Position by system** on the dashboard is clickable: a row opens Master Stock
+filtered to that system.
+
 **Reorder level** — Settings holds one default threshold shared by all users,
 and any article can override it with its own `min_qty`. That override matters: a
 roller-set line at 1,760 pieces and a corner cleat at 18 cannot share a trigger
 point.
+
+**Book stock to a job** (Villa Projects, or the dashboard) is the everyday
+posting screen: choose the job — or type a new one, which is created as part of
+the same posting — choose the system the material is for, then type quantities
+against that system's articles with the balance and the minimum shown beside
+each. Everything goes in one batch, so the ledger and the balances move
+together. If a line would take an article below zero the app says so before you
+post, and still lets you post it, because the ledger records what really
+happened.
+
+**Reports** has two.
+
+*Stock by system* groups every article under its system, with received, issued,
+balance, minimum and status per line. Click a system heading to open it.
+
+*Below minimum* is the replenishment report: everything at or below its minimum,
+worst first, with how much to order and a Receive button on each row. **Set
+minimum levels** applies a minimum to a whole system at once — doing it one
+article at a time is unusable across a list this size. Tick "only articles that
+have no minimum set yet" to fill the gaps without overwriting minimums you have
+already tuned.
+
+Both reports export to CSV.
 
 **Villa Project Summaries** aggregates every issue booked to a job into one row
 per article. Every movement is loaded for these totals to be complete; the

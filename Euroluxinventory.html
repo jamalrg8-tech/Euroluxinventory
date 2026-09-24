@@ -170,6 +170,20 @@ tbody td{padding:.7rem .7rem;border-bottom:1px solid var(--line-soft);vertical-a
 tbody tr:last-child td{border-bottom:none}
 tbody tr:hover{background:rgba(56,189,248,.04)}
 tbody tr.row-bad{background:rgba(248,113,113,.05)}
+tbody tr.row-link{cursor:pointer}
+tbody tr.row-link:hover{background:rgba(56,189,248,.08)}
+tbody tr.row-link:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.group-head{display:flex;align-items:center;gap:.6rem;width:100%;text-align:left;background:none;border:0;
+  color:inherit;font:inherit;padding:.75rem .9rem;cursor:pointer;border-bottom:1px solid var(--line)}
+.group-head:hover{background:var(--panel-2)}
+.group-head .caret{transition:transform .15s ease;flex:none;color:var(--muted)}
+.group-head.open .caret{transform:rotate(90deg)}
+.group-head .grow{flex:1;min-width:0}
+.modal-foot .grow{flex:1;min-width:0;text-align:left}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{background:none;border:0;color:var(--muted);font:inherit;font-size:.82rem;font-weight:600;
+  padding:.5rem .9rem;cursor:pointer}
+.seg button.on{background:var(--accent);color:#04121f}
 tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--panel-2);font-weight:700}
 .cell-actions{display:flex;gap:.3rem;justify-content:flex-end}
 
@@ -442,7 +456,10 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
 
         <div style="flex:1"></div>
 
-        <span class="pill" :class="shortageCount ? 'pill-warn' : 'pill-good'" title="Articles at or below their reorder level">
+        <span class="pill" :class="shortageCount ? 'pill-warn' : 'pill-good'" style="cursor:pointer"
+              role="button" tabindex="0" @click="report='low'; go('reports')"
+              @keydown.enter="report='low'; go('reports')"
+              title="Open the replenishment report">
           <span x-text="shortageCount"></span>
           <span class="pill-word" x-text="shortageCount===1 ? 'shortage' : 'shortages'"></span>
         </span>
@@ -471,6 +488,8 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
             </div>
             <div class="actions">
               <button class="btn btn-sm" @click="go('wizard')">BOM wizard</button>
+              <button class="btn btn-sm" @click="openBooking()" :disabled="!inventory.length">Book to a job</button>
+              <button class="btn btn-sm" @click="report='low'; go('reports')">Replenishment report</button>
               <button class="btn btn-sm btn-primary" @click="openItem()">Add profile</button>
             </div>
           </div>
@@ -479,7 +498,8 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
             <div class="kpi">
               <div class="kpi-label">Total Profile Varieties</div>
               <div class="kpi-value" x-text="fmt(inventory.length)"></div>
-              <div class="kpi-foot" x-text="`${systems.length} systems · ${projects.length} projects`"></div>
+              <div class="kpi-foot"
+                   x-text="`${fmt(systems.length)} systems · ${fmt(holdingInventory.length)} in ${holdingLabel}`"></div>
             </div>
             <div class="kpi">
               <div class="kpi-label">Total Received</div>
@@ -515,8 +535,14 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
           <template x-if="shortageItems.length">
             <div class="card">
               <div class="card-pad" style="border-bottom:1px solid var(--line)">
-                <h3 style="font-size:.95rem">Critical shortages detected</h3>
-                <p class="view-sub" x-text="`Balance at or below the reorder level (default threshold ${fmt(settings.shortageThreshold)}).`"></p>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
+                  <div>
+                    <h3 style="font-size:.95rem">Critical shortages detected</h3>
+                    <p class="view-sub"
+                       x-text="`${fmt(shortageCount)} article(s) at or below their minimum. Showing the 12 furthest below.`"></p>
+                  </div>
+                  <button class="btn btn-sm" @click="report='low'; go('reports')">Full report</button>
+                </div>
               </div>
               <div class="table-wrap" style="border:none;border-radius:0">
                 <table>
@@ -546,6 +572,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
             <div class="card">
               <div class="card-pad" style="border-bottom:1px solid var(--line)">
                 <h3 style="font-size:.95rem">Position by system</h3>
+                <p class="view-sub">Click a system to open its stock list.</p>
               </div>
               <div class="table-wrap" style="border:none;border-radius:0">
                 <table>
@@ -556,7 +583,9 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                   </tr></thead>
                   <tbody>
                     <template x-for="s in systemSummary" :key="s.name">
-                      <tr>
+                      <tr class="row-link" @click="openSystem(s.name)"
+                          role="button" tabindex="0" @keydown.enter="openSystem(s.name)"
+                          :title="`Open ${s.name} in Master Stock`">
                         <td style="font-weight:600" x-text="s.name"></td>
                         <td class="right num muted" x-text="fmt(s.count)"></td>
                         <td class="right num" style="color:var(--good)" x-text="fmt(s.received)"></td>
@@ -616,9 +645,18 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
           <div class="view-head">
             <div>
               <h2 class="view-title">Master Stock Control</h2>
-              <p class="view-sub" x-text="`${filteredInventory.length} of ${inventory.length} profiles shown`"></p>
+              <p class="view-sub"
+                 x-text="`${fmt(filteredInventory.length)} of ${fmt(holdingInventory.length)} articles in ${holdingLabel}`"></p>
             </div>
             <div class="actions">
+              <select class="select" style="width:auto;min-width:180px" x-model="selectedHolding"
+                      @change="selectedCategory='ALL SYSTEMS'" title="Which stock you are looking at">
+                <option value="Stock">Main stock</option>
+                <option value="ALL">All holdings</option>
+                <template x-for="h in holdings.filter(x => x !== 'Stock')" :key="h">
+                  <option :value="h" x-text="'For: ' + h"></option>
+                </template>
+              </select>
               <select class="select" style="width:auto;min-width:170px" x-model="selectedCategory">
                 <option value="ALL SYSTEMS">ALL SYSTEMS</option>
                 <template x-for="s in systems" :key="s">
@@ -627,6 +665,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
               </select>
               <button class="btn btn-sm" @click="exportCsv()" :disabled="!inventory.length">Export CSV</button>
               <button class="btn btn-sm" @click="importOpen=true">Import CSV</button>
+              <button class="btn btn-sm" @click="openLevels()" :disabled="!inventory.length">Min levels</button>
               <button class="btn btn-sm btn-primary" @click="openItem()">Add profile</button>
             </div>
           </div>
@@ -692,6 +731,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
             <div class="table-wrap stock-table">
               <table>
                 <thead><tr>
+                  <th x-show="selectedHolding==='ALL'">Held for</th>
                   <th>System</th>
                   <th>Article</th>
                   <th style="width:40%">Description</th>
@@ -704,6 +744,8 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                 <tbody>
                   <template x-for="item in filteredInventory" :key="item.id">
                     <tr :class="isShort(item) && 'row-bad'">
+                      <td class="faint truncate" style="max-width:150px" x-show="selectedHolding==='ALL'"
+                          x-text="holdingOf(item)"></td>
                       <td class="muted" style="white-space:nowrap" x-text="item.system_ref || '—'"></td>
                       <td class="mono" style="color:var(--accent);font-weight:700" x-text="item.article_ref"></td>
                       <td>
@@ -768,7 +810,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
               <table>
                 <thead><tr>
                   <th>When</th><th>Type</th><th>Article</th><th>Description</th>
-                  <th class="right">Qty</th><th>Project</th><th>Note</th><th>By</th>
+                  <th class="right">Qty</th><th>From</th><th>Project</th><th>Note</th><th>By</th>
                 </tr></thead>
                 <tbody>
                   <template x-for="m in visibleMovements" :key="m.id">
@@ -778,6 +820,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                       <td class="mono" style="color:var(--accent)" x-text="m.article_ref"></td>
                       <td class="muted truncate" style="max-width:240px" x-text="m.description || '—'"></td>
                       <td class="right num" x-text="(m.type==='issue'?'−':'+')+fmt(m.qty)"></td>
+                      <td class="faint truncate" style="max-width:150px" x-text="m.holding || 'Stock'"></td>
                       <td class="muted" x-text="m.project_code || '—'"></td>
                       <td class="faint truncate" style="max-width:200px" x-text="m.note || '—'"></td>
                       <td class="faint truncate" x-text="m.by_name || '—'"></td>
@@ -944,15 +987,17 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
             </div>
             <div class="actions">
               <button class="btn btn-sm" @click="exportProjectCsv()" :disabled="!projects.length">Export bookings</button>
-              <button class="btn btn-sm btn-primary" @click="openProject()">New project</button>
+              <button class="btn btn-sm" @click="openProject()">New job</button>
+              <button class="btn btn-sm btn-primary" @click="openBooking()"
+                      :disabled="!inventory.length">Book stock to a job</button>
             </div>
           </div>
 
           <template x-if="!projects.length">
             <div class="card empty">
               <div class="empty-title">No villa projects yet</div>
-              <div style="margin-bottom:1rem">Create a project so issued material can be costed against a job.</div>
-              <button class="btn btn-primary" @click="openProject()">Create project</button>
+              <div style="margin-bottom:1rem">Create a job so issued material can be costed against it.</div>
+              <button class="btn btn-primary" @click="openProject()">Create job</button>
             </div>
           </template>
 
@@ -974,6 +1019,8 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                          x-text="fmt(projectTotal(p.id))"></div>
                     <div class="faint" style="font-size:.7rem">TOTAL BOOKED</div>
                   </div>
+                  <button class="btn btn-sm btn-primary" @click="openBooking(p)"
+                          :disabled="!inventory.length">Book material</button>
                   <button class="btn btn-sm btn-ghost" @click="openProject(p)">Edit</button>
                   <button class="btn btn-sm btn-danger" @click="removeProject(p)">Delete</button>
                 </div>
@@ -1009,6 +1056,364 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
         </div>
 
         <!-- ============ SETTINGS ============ -->
+        <!-- ============ MTO IMPORT ============ -->
+        <div id="view-mto" x-show="currentTab==='mto'" class="stack">
+          <div class="view-head">
+            <div>
+              <h2 class="view-title">MTO Import</h2>
+              <p class="view-sub">Read a Logikal material analysis and book the whole job off stock in one go.</p>
+            </div>
+            <div class="actions">
+              <label class="btn btn-sm btn-primary" style="cursor:pointer">
+                <span x-show="mtoBusy" class="spinner"></span>
+                <span x-text="mto.lines.length ? 'Choose another file' : 'Choose MTO file'"></span>
+                <input type="file" accept=".xlsx,.xls,.xlsm" style="display:none" @change="readMtoFile($event)">
+              </label>
+              <button class="btn btn-sm" x-show="mto.lines.length" @click="clearMto()">Clear</button>
+            </div>
+          </div>
+
+          <template x-if="!mto.lines.length">
+            <div class="card empty">
+              <div class="empty-title">No MTO loaded</div>
+              <div style="margin-bottom:1rem;max-width:56ch;margin-inline:auto">
+                Choose the <strong>Material analysis</strong> spreadsheet Logikal produces for a job.
+                The app reads its Profiles, Hardware, Accessories and Gaskets sections, matches every
+                article against your stock list, and shows you exactly what it will deduct before
+                anything is posted.
+              </div>
+              <p class="hint" style="max-width:56ch;margin-inline:auto">
+                Profiles are deducted as whole bars (the Quantity column, as the optimiser worked it
+                out). Hardware, accessories and gaskets are deducted as pieces, metres or pairs (the
+                Required column), because that is how your stock counts them. Every line stays
+                editable below.
+              </p>
+            </div>
+          </template>
+
+          <template x-if="mto.lines.length">
+            <div class="stack">
+              <div class="card">
+                <div class="card-pad">
+                  <div class="row" style="justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap">
+                    <div style="min-width:0">
+                      <h3 style="font-size:1rem" x-text="mto.project || mto.fileName"></h3>
+                      <p class="view-sub">
+                        <span class="mono" style="font-size:.78rem" x-text="mto.fileName"></span>
+                        <span x-show="mto.dated" x-text="' \u00b7 dated ' + mto.dated"></span>
+                      </p>
+                    </div>
+                    <div class="row" style="gap:1.4rem">
+                      <div class="right">
+                        <div class="num" style="font-size:1.2rem;font-weight:700" x-text="fmt(mto.lines.length)"></div>
+                        <div class="faint" style="font-size:.7rem">LINES</div>
+                      </div>
+                      <div class="right">
+                        <div class="num" style="font-size:1.2rem;font-weight:700;color:var(--good)"
+                             x-text="fmt(mto.lines.length - mtoMissing.length)"></div>
+                        <div class="faint" style="font-size:.7rem">IN STOCK LIST</div>
+                      </div>
+                      <div class="right">
+                        <div class="num" style="font-size:1.2rem;font-weight:700"
+                             :style="mtoMissing.length ? 'color:var(--warn)' : ''" x-text="fmt(mtoMissing.length)"></div>
+                        <div class="faint" style="font-size:.7rem">WILL BE CREATED</div>
+                      </div>
+                      <div class="right">
+                        <div class="num" style="font-size:1.2rem;font-weight:700"
+                             :style="mtoNegative.length ? 'color:var(--bad)' : ''" x-text="fmt(mtoNegative.length)"></div>
+                        <div class="faint" style="font-size:.7rem">GO NEGATIVE</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="grid-2" style="margin-top:1rem">
+                    <div class="field">
+                      <label class="label">Book to job *</label>
+                      <select id="mto-project" class="select" x-show="!mtoNewProject" x-model="mto.projectId"
+                              @change="mto.projectId==='__new' && (mtoNewProject=true, mto.projectId='')">
+                        <option value="">&mdash; Choose a job &mdash;</option>
+                        <template x-for="p in projects" :key="p.id">
+                          <option :value="p.id" x-text="p.project_code"></option>
+                        </template>
+                        <option value="__new">+ Create a new job&hellip;</option>
+                      </select>
+                      <div class="row" x-show="mtoNewProject" style="gap:.4rem">
+                        <input class="input" x-model.trim="mto.newProject" placeholder="Job name">
+                        <button type="button" class="btn btn-sm"
+                                @click="mtoNewProject=false; mto.newProject=''">Cancel</button>
+                      </div>
+                      <span class="hint" x-show="mtoNewProject && mto.newProject">Taken from the file &mdash; edit if your job is named differently.</span>
+                    </div>
+                    <div class="field">
+                      <label class="label">Draw from *</label>
+                      <select id="mto-holding" class="select" x-model="mto.holding">
+                        <option value="Stock">Main stock</option>
+                        <template x-for="h in holdings.filter(x => x !== 'Stock')" :key="h">
+                          <option :value="h" x-text="'Allocated to ' + h"></option>
+                        </template>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="grid-2">
+                    <div class="field">
+                      <label class="label">System *</label>
+                      <select id="mto-system" class="select" x-model="mto.system">
+                        <option value="">&mdash; Choose a system &mdash;</option>
+                        <template x-for="sy in systemOptions" :key="sy">
+                          <option :value="sy" x-text="sy"></option>
+                        </template>
+                      </select>
+                      <span class="hint" x-show="mto.systemGuessed">Guessed from the file name &mdash; change it if wrong.</span>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label class="label">Note (optional)</label>
+                    <input class="input" x-model.trim="mto.note" placeholder="e.g. released to production 24-09">
+                  </div>
+                </div>
+              </div>
+
+              <template x-if="mtoMissing.length">
+                <div class="banner banner-warn">
+                  <div>
+                    <strong x-text="`${fmt(mtoMissing.length)} article(s) are not in your stock list.`"></strong>
+                    They will be created at zero and go straight to negative, so the job's real
+                    consumption is recorded:
+                    <span class="mono" style="font-size:.78rem"
+                          x-text="mtoMissing.slice(0,8).map(l => l.art).join(', ') + (mtoMissing.length > 8 ? '…' : '')"></span>
+                  </div>
+                </div>
+              </template>
+
+              <div class="card">
+                <div class="card-pad" style="border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
+                  <div>
+                    <h3 style="font-size:.95rem">What will be deducted</h3>
+                    <p class="view-sub">Every figure is editable. Set a line to zero to leave it out.</p>
+                  </div>
+                  <input class="input" style="max-width:260px" x-model.trim="mtoSearch"
+                         placeholder="Filter by code or description">
+                </div>
+                <div class="table-wrap" style="border:none;border-radius:0">
+                  <table>
+                    <thead><tr>
+                      <th>Section</th><th>Article</th><th>Description</th>
+                      <th class="right">MTO qty</th><th class="right">PU</th>
+                      <th class="right">Required</th><th>Unit</th>
+                      <th class="right">Deduct</th><th class="right">On hand</th>
+                      <th class="right">After</th><th>In holding</th>
+                    </tr></thead>
+                    <tbody>
+                      <template x-for="l in mtoVisible" :key="l.art + l.sec">
+                        <tr :class="mtoAfter(l) < 0 && 'row-bad'">
+                          <td class="faint" x-text="l.sec"></td>
+                          <td class="mono" style="color:var(--accent);font-weight:700" x-text="l.art"></td>
+                          <td class="truncate" style="max-width:230px" x-text="l.desc"></td>
+                          <td class="right num muted" x-text="fmt(l.qty)"></td>
+                          <td class="right num faint" x-text="l.pu ? fmt(l.pu) : '—'"></td>
+                          <td class="right num muted" x-text="fmt(l.req)"></td>
+                          <td class="faint" x-text="l.unit || '—'"></td>
+                          <td class="right">
+                            <input class="input num" type="number" min="0" step="any"
+                                   style="max-width:110px;margin-left:auto"
+                                   :value="l.deduct" @input="l.deduct = num($event.target.value)">
+                          </td>
+                          <td class="right num" x-text="mtoItem(l.art) ? fmt(balanceOf(mtoItem(l.art))) : '—'"></td>
+                          <td class="right num" style="font-weight:700"
+                              :style="mtoAfter(l) < 0 ? 'color:var(--bad);font-weight:700' : 'font-weight:700'"
+                              x-text="fmt(mtoAfter(l))"></td>
+                          <td>
+                            <span class="pill" :class="mtoItem(l.art) ? 'pill-good' : 'pill-warn'"
+                                  x-text="mtoItem(l.art) ? 'known' : 'new'"></span>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="card-pad" style="border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
+                  <span class="faint" style="font-size:.82rem"
+                        x-text="`${fmt(mtoActive.length)} line(s) will post` +
+                                (mtoVisible.length !== mto.lines.length ? ` · showing ${fmt(mtoVisible.length)} of ${fmt(mto.lines.length)}` : '')"></span>
+                  <button class="btn btn-primary" @click="postMto()"
+                          :disabled="mtoPosting || !mtoActive.length || !mto.system || (!mto.projectId && !mto.newProject)">
+                    <span x-show="mtoPosting" class="spinner"></span><span>Deduct from stock</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- ============ REPORTS ============ -->
+        <div id="view-reports" x-show="currentTab==='reports'" class="stack">
+          <div class="view-head">
+            <div>
+              <h2 class="view-title">Reports</h2>
+              <p class="view-sub"
+                 x-text="`Current stock by system, and everything below its minimum \u2014 for ${holdingLabel}.`"></p>
+            </div>
+            <div class="actions">
+              <select class="select" style="width:auto;min-width:160px" x-model="selectedHolding">
+                <option value="Stock">Main stock</option>
+                <option value="ALL">All holdings</option>
+                <template x-for="h in holdings.filter(x => x !== 'Stock')" :key="h">
+                  <option :value="h" x-text="'For: ' + h"></option>
+                </template>
+              </select>
+              <div class="seg">
+                <button :class="report==='stock' && 'on'" @click="report='stock'">Stock by system</button>
+                <button :class="report==='low' && 'on'" @click="report='low'">Below minimum</button>
+              </div>
+              <button class="btn btn-sm" @click="report==='stock' ? exportStockReport() : exportLowReport()"
+                      :disabled="!inventory.length">Export CSV</button>
+            </div>
+          </div>
+
+          <!-- ---- stock by system ---- -->
+          <template x-if="report==='stock'">
+            <div class="stack">
+              <template x-if="!inventory.length">
+                <div class="card empty">
+                  <div class="empty-title">Nothing in stock yet</div>
+                  <div>Import your stock list and this report fills itself in.</div>
+                </div>
+              </template>
+
+              <template x-if="inventory.length">
+                <div class="kpis">
+                  <div class="kpi">
+                    <div class="kpi-label">Systems</div>
+                    <div class="kpi-value" x-text="fmt(systemSummary.length)"></div>
+                    <div class="kpi-foot" x-text="`${fmt(inventory.length)} articles in total`"></div>
+                  </div>
+                  <div class="kpi">
+                    <div class="kpi-label">On Hand</div>
+                    <div class="kpi-value" style="color:var(--good)" x-text="fmt(totals.balance)"></div>
+                    <div class="kpi-foot">received less issued</div>
+                  </div>
+                  <div class="kpi">
+                    <div class="kpi-label">Below Minimum</div>
+                    <div class="kpi-value" :style="shortageCount ? 'color:var(--bad)' : ''" x-text="fmt(shortageCount)"></div>
+                    <div class="kpi-foot">articles needing replenishment</div>
+                  </div>
+                  <div class="kpi">
+                    <div class="kpi-label">Negative</div>
+                    <div class="kpi-value" :style="negativeCount ? 'color:var(--bad)' : ''" x-text="fmt(negativeCount)"></div>
+                    <div class="kpi-foot">issued more than was received</div>
+                  </div>
+                </div>
+              </template>
+
+              <template x-for="g in systemSummary" :key="g.name">
+                <div class="card">
+                  <button type="button" class="group-head" :class="openGroups[g.name] && 'open'"
+                          @click="toggleGroup(g.name)">
+                    <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M9 18l6-6-6-6"/>
+                    </svg>
+                    <span class="grow">
+                      <span style="font-weight:700" x-text="g.name"></span>
+                      <span class="faint" style="font-size:.78rem;margin-left:.5rem"
+                            x-text="`${fmt(g.count)} articles`"></span>
+                    </span>
+                    <span class="pill" :class="g.short ? 'pill-warn' : 'pill-good'"
+                          x-text="g.short ? `${fmt(g.short)} low` : 'all above min'"></span>
+                    <span class="num" style="font-weight:700;min-width:6rem;text-align:right"
+                          x-text="fmt(g.balance)"></span>
+                  </button>
+
+                  <template x-if="openGroups[g.name]">
+                    <div class="table-wrap" style="border:none;border-radius:0">
+                      <table>
+                        <thead><tr>
+                          <th>Article</th><th>Description</th><th>Unit</th>
+                          <th class="right">Received</th><th class="right">Issued</th>
+                          <th class="right">Balance</th><th class="right">Min</th><th>Status</th>
+                        </tr></thead>
+                        <tbody>
+                          <template x-for="i in systemItems(g.name)" :key="i.id">
+                            <tr :class="isShort(i) && 'row-bad'">
+                              <td class="mono" style="color:var(--accent);font-weight:700" x-text="i.article_ref"></td>
+                              <td x-text="i.description"></td>
+                              <td class="faint" x-text="i.unit || '—'"></td>
+                              <td class="right num" style="color:var(--good)" x-text="fmt(i.received_qty)"></td>
+                              <td class="right num" style="color:var(--violet)" x-text="fmt(i.issued_qty)"></td>
+                              <td class="right num" style="font-weight:700"
+                                  :style="balanceOf(i) < 0 ? 'color:var(--bad);font-weight:700' : 'font-weight:700'"
+                                  x-text="fmt(balanceOf(i))"></td>
+                              <td class="right num muted" x-text="fmt(reorderLevel(i))"></td>
+                              <td><span class="pill" :class="statusClass(i)" x-text="statusLabel(i)"></span></td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <!-- ---- below minimum ---- -->
+          <template x-if="report==='low'">
+            <div class="stack">
+              <div class="card">
+                <div class="card-pad" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
+                  <div>
+                    <h3 style="font-size:.95rem">Replenishment report</h3>
+                    <p class="view-sub"
+                       x-text="`${fmt(shortageCount)} of ${fmt(inventory.length)} articles are at or below their minimum. Default minimum is ${fmt(settings.shortageThreshold)} where no article minimum is set.`"></p>
+                  </div>
+                  <button class="btn btn-sm" @click="openLevels()">Set minimum levels</button>
+                </div>
+              </div>
+
+              <template x-if="!shortageItems.length">
+                <div class="card empty">
+                  <div class="empty-title">Nothing below its minimum</div>
+                  <div>Every article is above its reorder level.</div>
+                </div>
+              </template>
+
+              <template x-if="shortageItems.length">
+                <div class="table-wrap">
+                  <table>
+                    <thead><tr>
+                      <th>System</th><th>Article</th><th>Description</th><th>Unit</th>
+                      <th class="right">Balance</th><th class="right">Minimum</th>
+                      <th class="right">Order at least</th><th>Status</th><th class="right">Actions</th>
+                    </tr></thead>
+                    <tbody>
+                      <template x-for="i in shortageItems" :key="i.id">
+                        <tr class="row-bad">
+                          <td class="muted truncate" style="max-width:190px" x-text="i.system_ref || '—'"></td>
+                          <td class="mono" style="color:var(--accent);font-weight:700" x-text="i.article_ref"></td>
+                          <td x-text="i.description"></td>
+                          <td class="faint" x-text="i.unit || '—'"></td>
+                          <td class="right num" :style="balanceOf(i) < 0 ? 'color:var(--bad);font-weight:700' : 'font-weight:700'"
+                              x-text="fmt(balanceOf(i))"></td>
+                          <td class="right num muted" x-text="fmt(reorderLevel(i))"></td>
+                          <td class="right num" style="color:var(--bad);font-weight:700"
+                              x-text="fmt(Math.max(0, reorderLevel(i) - balanceOf(i)))"></td>
+                          <td><span class="pill" :class="statusClass(i)" x-text="statusLabel(i)"></span></td>
+                          <td class="right">
+                            <div class="cell-actions">
+                              <button class="btn btn-sm" @click="openMove(i,'receive')">Receive</button>
+                              <button class="btn btn-sm btn-ghost" @click="openItem(i)">Edit</button>
+                            </div>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+
         <div id="view-settings" x-show="currentTab==='settings'" class="stack">
           <div class="view-head">
             <div>
@@ -1080,6 +1485,16 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
               <div class="field">
                 <label class="label">Article code *</label>
                 <input class="input mono" x-model.trim="itemForm.article_ref" required placeholder="e.g. 391440">
+              </div>
+              <div class="field">
+                <label class="label">Held for</label>
+                <select class="select" x-model="itemForm.holding">
+                  <option value="Stock">Main stock</option>
+                  <template x-for="h in holdings.filter(x => x !== 'Stock')" :key="h">
+                    <option :value="h" x-text="h"></option>
+                  </template>
+                </select>
+                <span class="hint">Main stock is free to use. Anything else is bought for that job.</span>
               </div>
               <div class="field">
                 <label class="label">System reference</label>
@@ -1356,6 +1771,183 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
     </div>
   </template>
 
+  <!-- ===================== MINIMUM LEVELS MODAL ===================== -->
+  <template x-if="levelsOpen">
+    <div class="backdrop" @click.self="levelsOpen=false" @keydown.escape.window="levelsOpen=false">
+      <div class="modal" style="max-width:560px">
+        <div class="modal-head">
+          <h3>Set minimum levels</h3>
+          <button class="btn btn-sm btn-ghost" @click="levelsOpen=false">Close</button>
+        </div>
+        <div class="modal-body">
+          <div class="banner banner-info">
+            <div>
+              An article is flagged for replenishment once its balance reaches its minimum.
+              Articles with no minimum of their own fall back to the shared default in
+              Settings (<span x-text="fmt(settings.shortageThreshold)"></span>).
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label class="label">Apply to</label>
+              <select class="select" x-model="levelsForm.system">
+                <option value="">Every system</option>
+                <template x-for="g in systemSummary" :key="g.name">
+                  <option :value="g.name" x-text="g.name"></option>
+                </template>
+              </select>
+            </div>
+            <div class="field">
+              <label class="label">Minimum level</label>
+              <input class="input num" type="number" min="0" step="any" x-model.number="levelsForm.value">
+            </div>
+          </div>
+          <label class="row" style="gap:.5rem;cursor:pointer;margin-top:.2rem">
+            <input type="checkbox" x-model="levelsForm.onlyBlank">
+            <span>Only articles that have no minimum set yet</span>
+          </label>
+          <p class="hint" style="margin-top:.6rem"
+             x-text="`This will change ${fmt(levelsTargets.length)} article(s).`"></p>
+        </div>
+        <div class="modal-foot">
+          <button class="btn" @click="levelsOpen=false">Cancel</button>
+          <button class="btn btn-primary" @click="applyLevels()" :disabled="saving || !levelsTargets.length">
+            <span x-show="saving" class="spinner"></span><span>Apply</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ===================== BOOK TO JOB MODAL ===================== -->
+  <template x-if="bookOpen">
+    <div class="backdrop" @click.self="bookOpen=false" @keydown.escape.window="bookOpen=false">
+      <div class="modal" style="max-width:920px">
+        <div class="modal-head">
+          <h3>Book stock to a job</h3>
+          <button class="btn btn-sm btn-ghost" @click="bookOpen=false">Close</button>
+        </div>
+        <div class="modal-body">
+          <div class="grid-2">
+            <div class="field">
+              <label class="label">Job / villa project *</label>
+              <select id="book-project" class="select" x-show="!bookNewProject" x-model="book.projectId"
+                      @change="book.projectId==='__new' && (bookNewProject=true, book.projectId='')">
+                <option value="">&mdash; Choose a job &mdash;</option>
+                <template x-for="p in projects" :key="p.id">
+                  <option :value="p.id" x-text="p.project_code"></option>
+                </template>
+                <option value="__new">+ Create a new job&hellip;</option>
+              </select>
+              <div class="row" x-show="bookNewProject" style="gap:.4rem">
+                <input class="input" x-model.trim="book.newProject" placeholder="e.g. Villa 58 - Rasha">
+                <button type="button" class="btn btn-sm"
+                        @click="bookNewProject=false; book.newProject=''">Cancel</button>
+              </div>
+            </div>
+            <div class="field">
+              <label class="label">Draw from *</label>
+              <select id="book-holding" class="select" x-model="book.holding" @change="book.picked={}">
+                <option value="Stock">Main stock</option>
+                <template x-for="h in holdings.filter(x => x !== 'Stock')" :key="h">
+                  <option :value="h" x-text="'Allocated to ' + h"></option>
+                </template>
+              </select>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label class="label">System *</label>
+              <select id="book-system" class="select" x-model="book.system" @change="book.picked={}">
+                <option value="">&mdash; Choose a system &mdash;</option>
+                <template x-for="sy in bookSystems" :key="sy">
+                  <option :value="sy" x-text="sy"></option>
+                </template>
+              </select>
+            </div>
+            <div></div>
+          </div>
+
+          <template x-if="!book.system">
+            <p class="hint">Choose a system and its articles appear below, with what is on hand.</p>
+          </template>
+
+          <template x-if="book.system">
+            <div class="stack" style="gap:.6rem">
+              <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+                <input class="input" style="max-width:280px" x-model.trim="bookSearch"
+                       placeholder="Filter by code or description">
+                <div class="row" style="gap:.5rem">
+                  <span class="faint" style="font-size:.8rem"
+                        x-text="`${fmt(bookLines.length)} line(s) entered`"></span>
+                  <button type="button" class="btn btn-sm btn-ghost" @click="book.picked={}"
+                          :disabled="!bookLines.length">Clear</button>
+                </div>
+              </div>
+
+              <div class="table-wrap" style="max-height:46vh;overflow:auto">
+                <table>
+                  <thead><tr>
+                    <th>Article</th><th>Description</th><th>Unit</th>
+                    <th class="right">On hand</th><th class="right">Minimum</th><th class="right">Book qty</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="i in bookCandidates" :key="i.id">
+                      <tr :class="bookOver(i) && 'row-bad'">
+                        <td class="mono" style="color:var(--accent);font-weight:700" x-text="i.article_ref"></td>
+                        <td class="truncate" style="max-width:260px" x-text="i.description"></td>
+                        <td class="faint" x-text="i.unit || '—'"></td>
+                        <td class="right num" style="font-weight:700"
+                            :style="balanceOf(i) <= 0 ? 'color:var(--bad);font-weight:700' : 'font-weight:700'"
+                            x-text="fmt(balanceOf(i))"></td>
+                        <td class="right num muted" x-text="fmt(reorderLevel(i))"></td>
+                        <td class="right">
+                          <input class="input num" type="number" min="0" step="any"
+                                 style="max-width:110px;margin-left:auto"
+                                 :value="book.picked[i.id] || ''"
+                                 @input="setBookQty(i.id, $event.target.value)"
+                                 placeholder="0">
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+
+              <template x-if="bookShortages.length">
+                <div class="banner banner-warn">
+                  <div>
+                    <strong>More than is on hand.</strong>
+                    <span x-text="`${fmt(bookShortages.length)} line(s) would take the balance below zero: ` +
+                                  bookShortages.slice(0,4).map(l => l.article_ref).join(', ') +
+                                  (bookShortages.length > 4 ? '…' : '') + '.'"></span>
+                    You can still post it &mdash; the ledger records what really happened &mdash; but those
+                    articles will show as negative until the delivery is booked in.
+                  </div>
+                </div>
+              </template>
+
+              <div class="field">
+                <label class="label">Note (optional)</label>
+                <input class="input" x-model.trim="book.note"
+                       placeholder="e.g. cutting list 12-09, cutter Rafiq">
+              </div>
+            </div>
+          </template>
+        </div>
+        <div class="modal-foot">
+          <div class="grow faint" style="font-size:.8rem"
+               x-text="bookLines.length ? `${fmt(bookTotalQty)} in ${fmt(bookLines.length)} line(s)` : ''"></div>
+          <button class="btn" @click="bookOpen=false">Cancel</button>
+          <button class="btn btn-primary" @click="postBooking()"
+                  :disabled="issuing || !bookLines.length || (!book.projectId && !book.newProject)">
+            <span x-show="issuing" class="spinner"></span><span>Book to job</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </template>
+
   <!-- ===================== IMPORT MODAL ===================== -->
   <template x-if="importOpen">
     <div class="backdrop" @click.self="importOpen=false" @keydown.escape.window="importOpen=false">
@@ -1545,6 +2137,123 @@ function downloadCsv(rows, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/* ---------------------------------------------------------------------------
+   MTO / "Material analysis" reader
+   ---------------------------------------------------------------------------
+   Schuco Logikal exports a project's whole material take-off as one sheet,
+   split into sections (Profiles, Hardware, Accessories, Gaskets) with a header
+   row each. Two quantities sit on every line:
+
+     Quantity  - purchase units: whole BARS for profiles, packs for the rest
+     Required  - net consumption: metres for profiles and gaskets, pieces for
+                 hardware and accessories
+
+   Stock is counted in bars for profiles and in pieces/metres/pairs for
+   everything else, so the default deduction is Quantity for profiles and
+   Required for every other section. Each line stays editable before posting.
+--------------------------------------------------------------------------- */
+const MTO_SECTIONS = ["profiles", "profile", "hardware", "accessories", "articles",
+                      "gaskets", "gasket", "glass", "fillings"];
+
+let _xlsxPromise = null;
+function loadSheetReader() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  if (!_xlsxPromise) {
+    _xlsxPromise = new Promise((resolve, reject) => {
+      const tag = document.createElement("script");
+      tag.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.mini.min.js";
+      tag.onload = () => resolve(window.XLSX);
+      tag.onerror = () => reject(new Error(
+        "Could not load the spreadsheet reader. It needs a connection the first " +
+        "time; after that it is cached on this device."));
+      document.head.appendChild(tag);
+    });
+  }
+  return _xlsxPromise;
+}
+
+/* How a newly created article should be counted in stock, given its MTO line. */
+function mtoStockUnit(line) {
+  if (line.basis === "bars") return "BAR";
+  const u = String(line.unit || "").trim().toLowerCase();
+  if (u === "pc" || u === "pcs" || u === "piece") return "NO";
+  if (u === "pair" || u === "pairs") return "PAIR";
+  if (u === "m") return "M";
+  return line.unit || "NO";
+}
+
+function parseMto(aoa) {
+  const norm = (v) => String(v ?? "").trim();
+  const low  = (v) => norm(v).toLowerCase();
+  const tight = (v) => low(v).replace(/\s+/g, "");
+
+  /* Column positions are re-read at every header row: the Profiles section
+     carries a "Bar" column that the others do not, which shifts nothing we
+     use, but a future export might. */
+  const headerCols = (row) => {
+    const m = {};
+    (row || []).forEach((cell, i) => {
+      const t = tight(cell);
+      if (t === "quantity" && m.qty === undefined) m.qty = i;
+      else if (t === "pu" && m.pu === undefined) m.pu = i;
+      else if (t === "required" && m.req === undefined) m.req = i;
+      else if (t === "unit" && m.unit === undefined) m.unit = i;
+      else if (t === "articlenumber" && m.art === undefined) m.art = i;
+      else if (t === "description" && m.desc === undefined) m.desc = i;
+    });
+    return m.art !== undefined ? m : null;
+  };
+
+  let project = "", dated = "";
+  const lines = [];
+  let cols = null, section = "";
+
+  for (let r = 0; r < aoa.length; r++) {
+    const row = aoa[r] || [];
+    const filled = row.map(norm).filter(Boolean);
+
+    /* Project name and date sit above the first header row. */
+    if (!cols) {
+      for (const t of filled) {
+        if (!dated && /^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(t)) { dated = t; continue; }
+        if (!project && t.length > 6 && low(t) !== "material analysis" && !/^\d/.test(t)) project = t;
+      }
+    }
+
+    /* A lone section name on its own row switches section. */
+    if (filled.length === 1 && MTO_SECTIONS.includes(low(filled[0]))) {
+      section = filled[0]; continue;
+    }
+    const head = headerCols(row);
+    if (head) { cols = head; continue; }
+    if (!cols) continue;
+
+    const article = norm(row[cols.art]);
+    if (!article) continue;                       // Sum rows carry no article
+
+    /* Data rows repeat their section in a column left of Quantity. */
+    let sec = section;
+    for (let i = 0; i < (cols.qty ?? 2); i++) {
+      if (MTO_SECTIONS.includes(low(row[i]))) { sec = norm(row[i]); break; }
+    }
+
+    const qty = num(row[cols.qty]);
+    const req = num(cols.req !== undefined ? row[cols.req] : 0);
+    const isProfile = /^profile/.test(low(sec));
+    lines.push({
+      sec: sec || "(no section)",
+      art: article,
+      desc: norm(cols.desc !== undefined ? row[cols.desc] : "") || article,
+      unit: norm(cols.unit !== undefined ? row[cols.unit] : ""),
+      pu: num(cols.pu !== undefined ? row[cols.pu] : 0),
+      qty, req,
+      deduct: isProfile ? qty : req,
+      basis: isProfile ? "bars" : "required",
+    });
+  }
+  return { project, dated, lines };
+}
+
 /* Sample data — the Schüco articles and villa projects from the prototype. */
 const SAMPLE_INVENTORY = [
   { system_ref: "ADS / AWS 65", article_ref: "391420",  description: "INSRT OUTER FR.53/24 (319740) ( I )", received_qty: 26,   issued_qty: 0,    unit: "bars" },
@@ -1599,6 +2308,14 @@ document.addEventListener("alpine:init", () => {
     importOpen: false, importText: "", importsDone: {},
     ledgerShown: 300,
     itemSystemNew: false, bomSystemNew: false,
+    report: "stock", openGroups: {},
+    selectedHolding: "Stock",
+    mto: { fileName: "", project: "", dated: "", lines: [], system: "", systemGuessed: false,
+           holding: "Stock", projectId: "", newProject: "", note: "", tag: "" },
+    mtoBusy: false, mtoPosting: false, mtoNewProject: false, mtoSearch: "",
+    bookOpen: false, bookNewProject: false, bookSearch: "",
+    book: { projectId: "", newProject: "", system: "", holding: "Stock", note: "", picked: {} },
+    levelsOpen: false, levelsForm: { system: "", value: 0, onlyBlank: true },
 
     wizard: { bomId: "", units: 1, projectId: "" },
 
@@ -1613,6 +2330,10 @@ document.addEventListener("alpine:init", () => {
         icon: '<path d="M12 3l2.1 4.6 5 .6-3.7 3.4 1 5-4.4-2.5L7.6 16.6l1-5L4.9 8.2l5-.6z"/>' },
       { id: "projects", label: "Villa Projects",
         icon: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>' },
+      { id: "mto", label: "MTO Import",
+        icon: '<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6"/><path d="M9.5 14.5L12 17l2.5-2.5"/>' },
+      { id: "reports", label: "Reports",
+        icon: '<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/>' },
       { id: "settings", label: "Settings",
         icon: '<circle cx="12" cy="12" r="3"/><path d="M20 12a8 8 0 00-.14-1.5l2-1.5-2-3.46-2.35.9a8 8 0 00-2.6-1.5L14.5 2h-4l-.4 2.94a8 8 0 00-2.6 1.5l-2.36-.9-2 3.46 2 1.5a8 8 0 000 3l-2 1.5 2 3.46 2.35-.9a8 8 0 002.6 1.5l.41 2.94h4l.4-2.94a8 8 0 002.6-1.5l2.36.9 2-3.46-2-1.5c.1-.49.14-1 .14-1.5z"/>' },
     ],
@@ -1630,11 +2351,34 @@ document.addEventListener("alpine:init", () => {
       return this.displayName.split(/[\s._-]+/).filter(Boolean).slice(0, 2)
         .map((s) => s[0].toUpperCase()).join("") || "U";
     },
+    /* --- holdings ---------------------------------------------------------
+       Stock lives in two kinds of place, exactly as the master workbook keeps
+       it: "Stock" is the main warehouse, and every other holding is material
+       bought for one named villa. The same article can sit in both, and the
+       villa's material is NOT available to other jobs, so a stock record is
+       keyed by article AND holding.
+    -------------------------------------------------------------------- */
+    holdingOf(item) { return (item && item.holding) || "Stock"; },
+    get holdings() {
+      const set = new Set(this.inventory.map((i) => this.holdingOf(i)));
+      set.add("Stock");
+      return ["Stock", ...[...set].filter((h) => h !== "Stock")
+        .sort((a, b) => String(a).localeCompare(String(b)))];
+    },
+    /* Every stock view works within the chosen holding. */
+    get holdingInventory() {
+      if (this.selectedHolding === "ALL") return this.inventory;
+      return this.inventory.filter((i) => this.holdingOf(i) === this.selectedHolding);
+    },
+    get holdingLabel() {
+      return this.selectedHolding === "ALL" ? "all holdings" : this.selectedHolding;
+    },
+
     /* Systems that actually carry stock. Drives the stock filter, the KPI
        count and the BOM "seed from a system group" picker, so it must not
        contain systems with nothing in them. */
     get systems() {
-      return [...new Set(this.inventory.map((i) => i.system_ref).filter(Boolean))]
+      return [...new Set(this.holdingInventory.map((i) => i.system_ref).filter(Boolean))]
         .sort((a, b) => String(a).localeCompare(String(b)));
     },
     /* Everything offered when you TYPE a system reference: the systems above
@@ -1642,7 +2386,8 @@ document.addEventListener("alpine:init", () => {
        name a system before any stock carries it. */
     get systemOptions() {
       const out = [], seen = new Set();
-      for (const s of [...(knownSystems || []), ...this.systems]) {
+      const everywhere = [...new Set(this.inventory.map((i) => i.system_ref).filter(Boolean))];
+      for (const s of [...(knownSystems || []), ...everywhere]) {
         const k = key(s);
         if (!s || seen.has(k)) continue;
         seen.add(k); out.push(s);
@@ -1651,7 +2396,7 @@ document.addEventListener("alpine:init", () => {
     },
     get filteredInventory() {
       const q = key(this.searchQuery);
-      let list = this.inventory;
+      let list = this.holdingInventory;
       if (this.selectedCategory !== "ALL SYSTEMS") {
         list = list.filter((i) => i.system_ref === this.selectedCategory);
       }
@@ -1699,11 +2444,11 @@ document.addEventListener("alpine:init", () => {
       }
     },
 
-    get totals() { return this.sumOf(this.inventory); },
+    get totals() { return this.sumOf(this.holdingInventory); },
     get filteredTotals() { return this.sumOf(this.filteredInventory); },
     get systemSummary() {
       const map = new Map();
-      for (const i of this.inventory) {
+      for (const i of this.holdingInventory) {
         const name = i.system_ref || "(no system)";
         if (!map.has(name)) map.set(name, { name, count: 0, received: 0, issued: 0, balance: 0, short: 0 });
         const s = map.get(name);
@@ -1716,12 +2461,393 @@ document.addEventListener("alpine:init", () => {
       return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
     },
     get shortageItems() {
-      return this.inventory
+      return this.holdingInventory
         .filter((i) => this.isShort(i))
         .sort((a, b) =>
           (this.reorderLevel(b) - this.balanceOf(b)) - (this.reorderLevel(a) - this.balanceOf(a)));
     },
     get shortageCount() { return this.shortageItems.length; },
+    get negativeCount() { return this.holdingInventory.filter((i) => this.balanceOf(i) < 0).length; },
+
+    /* Every article in one system, ordered by code, for the Reports drill-down. */
+    systemItems(name) {
+      return this.holdingInventory
+        .filter((i) => (i.system_ref || "(no system)") === name)
+        .sort((a, b) => String(a.article_ref)
+          .localeCompare(String(b.article_ref), undefined, { numeric: true }));
+    },
+    toggleGroup(name) { this.openGroups[name] = !this.openGroups[name]; },
+
+    exportStockReport() {
+      const rows = [["holding", "system_ref", "article_ref", "description", "unit", "location",
+                     "received_qty", "issued_qty", "balance_stock_qty", "minimum_level",
+                     "short_by", "status"]];
+      for (const g of this.systemSummary) {
+        for (const i of this.systemItems(g.name)) {
+          const bal = this.balanceOf(i), min = this.reorderLevel(i);
+          rows.push([this.holdingOf(i), g.name, i.article_ref, i.description, i.unit || "", i.location || "",
+                     num(i.received_qty), num(i.issued_qty), bal, min,
+                     Math.max(0, min - bal), this.statusLabel(i)]);
+        }
+      }
+      if (rows.length === 1) { this.toast("Nothing to export yet.", "err"); return; }
+      downloadCsv(rows, "eurolux-stock-by-system-" + new Date().toISOString().slice(0, 10) + ".csv");
+    },
+    exportLowReport() {
+      const rows = [["holding", "system_ref", "article_ref", "description", "unit",
+                     "balance_stock_qty", "minimum_level", "order_at_least", "status"]];
+      for (const i of this.shortageItems) {
+        const bal = this.balanceOf(i), min = this.reorderLevel(i);
+        rows.push([this.holdingOf(i), i.system_ref || "", i.article_ref, i.description, i.unit || "",
+                   bal, min, Math.max(0, min - bal), this.statusLabel(i)]);
+      }
+      if (rows.length === 1) { this.toast("Nothing is below its minimum.", "err"); return; }
+      downloadCsv(rows, "eurolux-below-minimum-" + new Date().toISOString().slice(0, 10) + ".csv");
+    },
+
+    /* ---- MTO import ------------------------------------------------------ */
+    clearMto() {
+      this.mto = { fileName: "", project: "", dated: "", lines: [], system: "", systemGuessed: false,
+                   holding: "Stock", projectId: "", newProject: "", note: "", tag: "" };
+      this.mtoNewProject = false; this.mtoSearch = "";
+    },
+    /* Resolve an MTO line against the holding it is being drawn from. */
+    mtoItem(article) {
+      return this.inventory.find((i) =>
+        key(i.article_ref) === key(article) &&
+        key(this.holdingOf(i)) === key(this.mto.holding)) || null;
+    },
+    mtoAfter(line) {
+      const item = this.mtoItem(line.art);
+      return (item ? this.balanceOf(item) : 0) - num(line.deduct);
+    },
+    get mtoActive() { return this.mto.lines.filter((l) => num(l.deduct) > 0); },
+    get mtoMissing() { return this.mto.lines.filter((l) => !this.mtoItem(l.art)); },
+    get mtoNegative() { return this.mtoActive.filter((l) => this.mtoAfter(l) < 0); },
+    get mtoVisible() {
+      const q = key(this.mtoSearch);
+      if (!q) return this.mto.lines;
+      return this.mto.lines.filter((l) =>
+        [l.art, l.desc, l.sec].map((v) => String(v ?? "")).join(" ").toLowerCase().includes(q));
+    },
+
+    async readMtoFile(event) {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = "";                       // let the same file be re-chosen
+      if (!file) return;
+      this.mtoBusy = true;
+      try {
+        const XLSX = await loadSheetReader();
+        const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+
+        // Logikal writes one sheet, but take the first that actually parses.
+        let parsed = null;
+        for (const name of wb.SheetNames) {
+          const aoa = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null });
+          const p = parseMto(aoa);
+          if (p.lines.length) { parsed = p; break; }
+        }
+        if (!parsed) {
+          this.toast('That file does not look like a material analysis \u2014 no "Article Number" ' +
+                     "column was found on any sheet.", "err");
+          return;
+        }
+
+        /* Guess the system from the file name, e.g.
+           "MTO_Material_analysis_for_ASE_36_PD_-_Villa_80". Punctuation varies
+           wildly between exports, so compare letters and digits only, and take
+           the longest match so "ASE 36 (BALANCE)" wins over "ASE 36". */
+        const squash = (v) => String(v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const fname = squash(file.name);
+        let system = "", guessed = false;
+        for (const sy of this.systemOptions) {
+          const t = squash(sy);
+          if (t && fname.includes(t) && t.length > squash(system).length) {
+            system = sy; guessed = true;
+          }
+        }
+
+        this.mto = {
+          fileName: file.name, project: parsed.project, dated: parsed.dated,
+          lines: parsed.lines, system, systemGuessed: guessed,
+          holding: "Stock", projectId: "", newProject: "", note: "",
+          tag: "MTO:" + (parsed.project || file.name),
+        };
+
+        // Prefill the job: match the file's project against the jobs you have.
+        const match = this.projects.find((p) => key(p.project_code) === key(parsed.project));
+        if (match) { this.mto.projectId = match.id; this.mtoNewProject = false; }
+        else if (parsed.project) { this.mtoNewProject = true; this.mto.newProject = parsed.project; }
+
+        if (this.mto.tag && this.importsDone[this.mto.tag]) {
+          this.toast('"' + (parsed.project || file.name) + '" was already deducted on ' +
+                     String(this.importsDone[this.mto.tag]).slice(0, 10) +
+                     ". Posting it again will deduct it twice.", "err");
+        }
+        this.toast("Read " + parsed.lines.length + " line(s) from " + file.name + ".", "ok");
+      } catch (e) {
+        this.toast("Could not read that file: " + e.message, "err");
+      } finally { this.mtoBusy = false; }
+    },
+
+    async postMto() {
+      if (this.mtoPosting) return;
+      const lines = this.mtoActive;
+      if (!lines.length || !this.mto.system) return;
+
+      let project = this.projects.find((p) => p.id === this.mto.projectId) || null;
+      const newName = String(this.mto.newProject || "").trim();
+      if (!project && !newName) { this.toast("Choose a job, or create one.", "err"); return; }
+      if (!project && this.projects.some((p) => key(p.project_code) === key(newName))) {
+        this.toast('A job called "' + newName + '" already exists. Pick it from the list.', "err");
+        return;
+      }
+      if (this.mto.tag && this.importsDone[this.mto.tag] &&
+          !confirm("This MTO was already deducted on " +
+                   String(this.importsDone[this.mto.tag]).slice(0, 10) +
+                   ".\n\nPosting it again DOUBLES every quantity.\n\nPost anyway?")) return;
+
+      const missing = this.mtoMissing.filter((l) => num(l.deduct) > 0);
+      if (!confirm("Deduct " + lines.length + " line(s) from stock for " +
+                   (project ? project.project_code : newName) + " / " + this.mto.system + "?" +
+                   (missing.length ? "\n\n" + missing.length + " article(s) will be created at zero and go negative." : "") +
+                   "\n\nThis posts to the ledger and cannot be undone from inside the app.")) return;
+
+      this.mtoPosting = true;
+      try {
+        let projectId, projectCode;
+        const first = writeBatch(db);
+        if (project) { projectId = project.id; projectCode = project.project_code; }
+        else {
+          const ref = doc(collection(db, collections.projects));
+          first.set(ref, { project_code: newName, client: "", status: "active",
+                           notes: "Created by MTO import", createdAt: serverTimestamp(),
+                           createdBy: this.displayName });
+          projectId = ref.id; projectCode = newName;
+        }
+
+        // Articles the MTO names that we have never stocked.
+        const created = new Map();
+        for (const l of missing) {
+          const ref = doc(collection(db, collections.inventory));
+          first.set(ref, {
+            article_ref: l.art, description: l.desc, system_ref: this.mto.system,
+            holding: this.mto.holding,
+            /* The MTO's unit is how the material is MEASURED (metres of profile),
+               not how it is STOCKED. Profiles are stocked as bars. */
+            unit: mtoStockUnit(l), location: "", min_qty: 0,
+            received_qty: 0, issued_qty: 0, balance_stock_qty: 0,
+            createdAt: serverTimestamp(), createdBy: this.displayName,
+            updatedAt: serverTimestamp(), updatedBy: this.displayName,
+          });
+          created.set(key(l.art), ref.id);
+        }
+        this.track(first.commit(), project && !created.size ? "the job" : "the new articles");
+
+        const note = ["MTO", this.mto.project || this.mto.fileName, this.mto.note]
+          .filter(Boolean).join(" \u2014 ");
+
+        for (let i = 0; i < lines.length; i += 200) {
+          const batch = writeBatch(db);
+          for (const l of lines.slice(i, i + 200)) {
+            const item = this.mtoItem(l.art);
+            const id = item ? item.id : created.get(key(l.art));
+            if (!id) continue;
+            const qty = num(l.deduct);
+            batch.update(doc(db, collections.inventory, id), {
+              issued_qty: increment(qty), balance_stock_qty: increment(-qty),
+              updatedAt: serverTimestamp(), updatedBy: this.displayName,
+            });
+            batch.set(doc(collection(db, collections.movements)), {
+              item_id: id, article_ref: l.art, description: l.desc,
+              system_ref: (item && item.system_ref) || this.mto.system,
+              holding: this.mto.holding,
+              type: "issue", qty,
+              project_id: projectId, project_code: projectCode,
+              note, at: serverTimestamp(),
+              by: this.authUser.uid, by_name: this.displayName,
+            });
+          }
+          this.track(batch.commit(), "the MTO");
+        }
+
+        if (this.mto.tag) {
+          this.track(setDoc(doc(db, collections.settings, "imports"),
+            { [this.mto.tag]: new Date().toISOString() }, { merge: true }), "the import record");
+        }
+
+        const n = lines.length, made = created.size;
+        this.clearMto();
+        this.toast(this.savedMsg("MTO posted \u2014 " + n + " line(s) deducted for " + projectCode +
+                   (made ? ", " + made + " new article(s) created" : "") + "."), "ok");
+        this.go("projects");
+      } catch (e) {
+        this.toast("Could not post the MTO: " + e.message, "err");
+      } finally { this.mtoPosting = false; }
+    },
+
+    /* ---- book stock to a job ---------------------------------------------
+       The everyday job: pick the villa, pick the system it is for, type the
+       quantities against the articles that system uses, post the lot as one
+       batch so the ledger and the balances move together.
+    -------------------------------------------------------------------- */
+    openBooking(project = null, system = "") {
+      this.bookNewProject = false;
+      this.bookSearch = "";
+      this.book = { projectId: project ? project.id : "", newProject: "",
+                    system, holding: "Stock", note: "", picked: {} };
+      this.bookOpen = true;
+    },
+    /* Articles of the chosen system held in the chosen place. Holding matters:
+       bars bought for Villa 80 are not available to another job. */
+    get bookCandidates() {
+      if (!this.book.system) return [];
+      const q = key(this.bookSearch);
+      return this.inventory
+        .filter((i) => (i.system_ref || "(no system)") === this.book.system &&
+                       key(this.holdingOf(i)) === key(this.book.holding))
+        .filter((i) => !q || [i.article_ref, i.description].map((v) => String(v ?? ""))
+                .join(" ").toLowerCase().includes(q))
+        .sort((a, b) => String(a.article_ref)
+          .localeCompare(String(b.article_ref), undefined, { numeric: true }));
+    },
+    /* Systems that have stock in the holding you are drawing from. */
+    get bookSystems() {
+      return [...new Set(this.inventory
+        .filter((i) => key(this.holdingOf(i)) === key(this.book.holding))
+        .map((i) => i.system_ref).filter(Boolean))]
+        .sort((a, b) => String(a).localeCompare(String(b)));
+    },
+    setBookQty(id, value) {
+      const n = num(value);
+      if (n > 0) this.book.picked[id] = n;
+      else delete this.book.picked[id];
+    },
+    /* Lines actually entered, resolved back to their stock records. */
+    get bookLines() {
+      const out = [];
+      for (const [id, qty] of Object.entries(this.book.picked)) {
+        const item = this.inventory.find((i) => i.id === id);
+        if (item && num(qty) > 0) out.push({ item, qty: num(qty), article_ref: item.article_ref });
+      }
+      return out;
+    },
+    get bookTotalQty() { return this.bookLines.reduce((a, l) => a + l.qty, 0); },
+    get bookShortages() {
+      return this.bookLines.filter((l) => l.qty > this.balanceOf(l.item));
+    },
+    bookOver(item) {
+      const q = num(this.book.picked[item.id]);
+      return q > 0 && q > this.balanceOf(item);
+    },
+
+    async postBooking() {
+      if (this.issuing) return;
+      const lines = this.bookLines;
+      if (!lines.length) return;
+
+      let project = this.projects.find((p) => p.id === this.book.projectId) || null;
+      const newName = String(this.book.newProject || "").trim();
+      if (!project && !newName) { this.toast("Choose a job, or create one.", "err"); return; }
+      if (!project && this.projects.some((p) => key(p.project_code) === key(newName))) {
+        this.toast('A job called "' + newName + '" already exists. Pick it from the list.', "err");
+        return;
+      }
+
+      if (!confirm("Book " + this.fmt(this.bookTotalQty) + " across " + lines.length +
+                   " line(s) to " + (project ? project.project_code : newName) +
+                   " for " + this.book.system + "?\n\n" +
+                   "This posts to the ledger and moves the balances.")) return;
+
+      this.issuing = true;
+      try {
+        const batch = writeBatch(db);
+
+        // A job typed into the form is created as part of the same batch.
+        let projectId, projectCode;
+        if (project) { projectId = project.id; projectCode = project.project_code; }
+        else {
+          const ref = doc(collection(db, collections.projects));
+          batch.set(ref, { project_code: newName, client: "", status: "active",
+                           notes: "Created while booking material",
+                           createdAt: serverTimestamp(), createdBy: this.displayName });
+          projectId = ref.id; projectCode = newName;
+        }
+
+        const note = [this.book.system,
+                      this.book.holding !== "Stock" ? "from " + this.book.holding : "",
+                      this.book.note].filter(Boolean).join(" \u2014 ");
+        for (const l of lines) {
+          batch.update(doc(db, collections.inventory, l.item.id), {
+            issued_qty: increment(l.qty),
+            balance_stock_qty: increment(-l.qty),
+            updatedAt: serverTimestamp(), updatedBy: this.displayName,
+          });
+          batch.set(doc(collection(db, collections.movements)), {
+            item_id: l.item.id, article_ref: l.item.article_ref,
+            description: l.item.description || "",
+            system_ref: l.item.system_ref || this.book.system,
+            holding: this.holdingOf(l.item),
+            type: "issue", qty: l.qty,
+            project_id: projectId, project_code: projectCode,
+            note, at: serverTimestamp(),
+            by: this.authUser.uid, by_name: this.displayName,
+          });
+        }
+
+        this.track(batch.commit(), "the booking");
+        this.bookOpen = false;
+        this.toast(this.savedMsg("Booked " + this.fmt(this.bookTotalQty) + " across " +
+                   lines.length + " line(s) to " + projectCode + "."), "ok");
+        this.go("projects");
+      } catch (e) {
+        this.toast("Could not book the material: " + e.message, "err");
+      } finally { this.issuing = false; }
+    },
+
+    /* ---- minimum levels in bulk ------------------------------------------
+       Setting a reorder level one article at a time is unusable across a list
+       this size, so this applies a level to a whole system at once. */
+    openLevels() {
+      this.levelsForm = { system: "", value: num(this.settings.shortageThreshold) || 10, onlyBlank: true };
+      this.levelsOpen = true;
+    },
+    get levelsTargets() {
+      const f = this.levelsForm;
+      let list = f.system
+        ? this.holdingInventory.filter((i) => (i.system_ref || "(no system)") === f.system)
+        : this.holdingInventory.slice();
+      if (f.onlyBlank) list = list.filter((i) => !(num(i.min_qty) > 0));
+      return list;
+    },
+    async applyLevels() {
+      if (this.saving) return;
+      const value = num(this.levelsForm.value);
+      if (!(value >= 0)) { this.toast("Enter a minimum level of zero or more.", "err"); return; }
+      const targets = this.levelsTargets;
+      if (!targets.length) { this.toast("No articles match that selection.", "err"); return; }
+      if (!confirm("Set a minimum level of " + this.fmt(value) + " on " +
+                   targets.length + " article(s)?")) return;
+
+      this.saving = true;
+      try {
+        for (let i = 0; i < targets.length; i += 300) {
+          const batch = writeBatch(db);
+          for (const item of targets.slice(i, i + 300)) {
+            batch.update(doc(db, collections.inventory, item.id), {
+              min_qty: value, updatedAt: serverTimestamp(), updatedBy: this.displayName,
+            });
+          }
+          this.track(batch.commit(), "the minimum levels");
+        }
+        this.levelsOpen = false;
+        this.toast(this.savedMsg("Minimum level of " + this.fmt(value) + " set on " +
+                   targets.length + " article(s)."), "ok");
+      } catch (e) {
+        this.toast("Could not set the levels: " + e.message, "err");
+      } finally { this.saving = false; }
+    },
+
     /* How many writes are still sitting on this device, unsent. */
     get pendingWrites() {
       return Object.values(this._pending).reduce((a, b) => a + (b || 0), 0);
@@ -1922,6 +3048,12 @@ document.addEventListener("alpine:init", () => {
     },
 
     /* ---------------- ui helpers ---------------- */
+    /* Dashboard -> the stock list, already filtered to that system. */
+    openSystem(name) {
+      this.selectedCategory = name;
+      this.searchQuery = "";
+      this.go("inventory");
+    },
     go(tab) {
       this.currentTab = tab;
       this.menuOpen = false;
@@ -2070,6 +3202,7 @@ document.addEventListener("alpine:init", () => {
       this.itemForm = item
         ? { ...item }
         : { article_ref: "", system_ref: "", description: "", unit: "bars",
+            holding: this.selectedHolding === "ALL" ? "Stock" : this.selectedHolding,
             location: "", min_qty: 0, received_qty: 0 };
       this.itemSystemNew = false;
       this.itemOpen = true;
@@ -2351,10 +3484,10 @@ document.addEventListener("alpine:init", () => {
 
     /* ---------------- CSV ---------------- */
     exportCsv() {
-      const header = ["system_ref", "article_ref", "description", "unit", "location",
+      const header = ["holding", "system_ref", "article_ref", "description", "unit", "location",
                       "min_qty", "received_qty", "issued_qty", "balance_stock_qty"];
       const rows = [header].concat(this.filteredInventory.map((i) => [
-        i.system_ref || "", i.article_ref, i.description, i.unit || "", i.location || "",
+        this.holdingOf(i), i.system_ref || "", i.article_ref, i.description, i.unit || "", i.location || "",
         num(i.min_qty), num(i.received_qty), num(i.issued_qty), this.balanceOf(i),
       ]));
       downloadCsv(rows, "eurolux-stock-" + new Date().toISOString().slice(0, 10) + ".csv");
@@ -2429,6 +3562,7 @@ document.addEventListener("alpine:init", () => {
       if (cArticle < 0) { this.toast('CSV must contain an "article_ref" column.', "err"); return; }
       const cDesc = col("description", "desc", "material_description"),
             cSys  = col("system_ref", "system"),
+            cHold = col("holding", "project_ref", "stock_location"),
             cUnit = col("unit"), cLoc = col("location"),
             cMin  = col("min_qty", "reorder", "reorder_level"),
             cRec  = col("received_qty", "received"),
@@ -2441,19 +3575,25 @@ document.addEventListener("alpine:init", () => {
         const r = rows[i];
         const article_ref = String(r[cArticle] ?? "").trim();
         if (!article_ref) { skipped++; continue; }
-        if (seen.has(key(article_ref))) { skipped++; continue; } // duplicate within the file
-        seen.add(key(article_ref));
-        data.push({ r, article_ref });
+        // The same article can be held in main stock AND against a villa, so a
+        // row is identified by that pair, not by the code alone.
+        const holding = (cHold >= 0 ? String(r[cHold] ?? "").trim() : "") || "Stock";
+        const rowId = key(article_ref) + "|" + key(holding);
+        if (seen.has(rowId)) { skipped++; continue; }   // duplicate within the file
+        seen.add(rowId);
+        data.push({ r, article_ref, holding });
       }
 
       for (let i = 0; i < data.length; i += 200) {
         const batch = writeBatch(db);
         for (const entry of data.slice(i, i + 200)) {
-          const r = entry.r, article_ref = entry.article_ref;
-          const existing = this.inventory.find((x) => key(x.article_ref) === key(article_ref));
+          const r = entry.r, article_ref = entry.article_ref, holding = entry.holding;
+          const existing = this.inventory.find((x) =>
+            key(x.article_ref) === key(article_ref) &&
+            key(this.holdingOf(x)) === key(holding));
 
           const fields = {
-            article_ref,
+            article_ref, holding,
             description: cDesc >= 0 ? String(r[cDesc] ?? "").trim() : ((existing && existing.description) || article_ref),
             system_ref: cSys >= 0 ? String(r[cSys] ?? "").trim() : ((existing && existing.system_ref) || ""),
             unit: cUnit >= 0 ? String(r[cUnit] ?? "").trim() : ((existing && existing.unit) || ""),
@@ -2544,8 +3684,11 @@ document.addEventListener("alpine:init", () => {
                      ".\n\nPosting it again will DOUBLE every quantity in it.\n\nImport anyway?")) return;
       }
 
-      const byArticle = new Map();
-      for (const i of this.inventory) byArticle.set(key(i.article_ref), i);
+      const byArticle = new Map();   // "article|holding" -> stock record
+      for (const i of this.inventory) {
+        byArticle.set(key(i.article_ref) + "|" + key(this.holdingOf(i)), i);
+      }
+      const cHold = col("holding", "project_ref", "stock_location");
 
       // Pass 1: parse, and work out which projects we are missing.
       const parsed = [];
@@ -2560,8 +3703,9 @@ document.addEventListener("alpine:init", () => {
         if (type === "issued" || type === "out") type = "issue";
         if (!["receive", "issue", "adjust"].includes(type)) type = "receive";
         if (!article_ref || !(qty > 0)) { skipped++; continue; }
-        const item = byArticle.get(key(article_ref));
-        if (!item) { skipped++; unknown.add(article_ref); continue; }
+        const holding = (cHold >= 0 ? String(r[cHold] ?? "").trim() : "") || "Stock";
+        const item = byArticle.get(key(article_ref) + "|" + key(holding));
+        if (!item) { skipped++; unknown.add(article_ref + " (" + holding + ")"); continue; }
         const code = cProj >= 0 ? String(r[cProj] ?? "").trim() : "";
         if (code) wantProjects.set(key(code), code);
         parsed.push({ item, type, qty, code,
@@ -2605,6 +3749,7 @@ document.addEventListener("alpine:init", () => {
           batch.set(doc(collection(db, collections.movements)), {
             item_id: m.item.id, article_ref: m.item.article_ref,
             description: m.item.description || "", system_ref: m.item.system_ref || "",
+            holding: this.holdingOf(m.item),
             type: m.type, qty: m.qty,
             project_id: (project && project.id) || "",
             project_code: (project && project.project_code) || "",
