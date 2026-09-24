@@ -225,18 +225,32 @@ The optional `import_tag` makes a movements file self-identifying. The app
 records the tags it has posted, so pasting the same file a second time warns you
 before it doubles every quantity in it.
 
+### Starting from a clean database
+
+Settings has a **Start over** panel that deletes every article, job and BOM
+template. Use it before importing a stock list if the database already has
+something in it (the 8 demo articles, or an earlier import) — otherwise the
+movements import adds its quantities on top of what is already there and every
+balance doubles.
+
+The movement ledger is deliberately left alone: no one can delete a movement
+from inside the app, which is what makes the ledger worth trusting. If you need
+to clear the ledger too, delete the `movements` collection from the Firebase
+console, which runs with admin rights and is not bound by the rules.
+
 ### Loading the master stock list
 
 The `import/` folder holds your 23-09 master stock list already converted.
 Import them **in this order**, from Master Stock › Import CSV:
 
-1. `import-1-stock.csv` — 729 articles across 14 systems.
-2. `import-2-projects.csv` — the 12 villa projects.
-3. `import-3-movements.csv` — 2,229 ledger entries (870 receipts tagged with
-   their delivery note, 1,359 issues tagged with their project). This one takes
-   about half a minute and asks you to confirm first.
+1. `import-1-stock.csv` — 1,212 stock records: 427 in main stock and 785
+   allocated to villas, covering 729 distinct articles.
+2. `import-2-projects.csv` — the 13 villa projects.
+3. `import-3-movements.csv` — 2,416 ledger entries, each tagged with its
+   delivery note or its project, and with the holding it belongs to. This one
+   takes about half a minute and asks you to confirm first.
 
-`check-negative-balances.csv` is not imported. It lists the 122 articles that
+`check-negative-balances.csv` is not imported. It lists the 179 records that
 finish below zero because the sheet records material issued to a job that was
 never booked in against a delivery note. Book those deliveries and the balances
 right themselves.

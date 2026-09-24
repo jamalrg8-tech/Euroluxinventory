@@ -527,7 +527,8 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
               </div>
               <div class="row" style="justify-content:center">
                 <button class="btn btn-primary" @click="go('inventory')">Go to Master Stock</button>
-                <button class="btn" @click="seedSample()" :disabled="saving">Load sample data</button>
+                <button class="btn btn-ghost" @click="seedSample()" :disabled="saving"
+                        title="8 demo articles for trying the app out — not your stock">Load 8 demo articles</button>
               </div>
             </div>
           </template>
@@ -680,7 +681,8 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
               <div class="row" style="justify-content:center">
                 <button class="btn btn-primary" @click="openItem()">Add first profile</button>
                 <button class="btn" @click="importOpen=true">Import CSV</button>
-                <button class="btn" @click="seedSample()" :disabled="saving">Load sample data</button>
+                <button class="btn btn-ghost" @click="seedSample()" :disabled="saving"
+                        title="8 demo articles for trying the app out — not your stock">Load 8 demo articles</button>
               </div>
             </div>
           </template>
@@ -1435,7 +1437,29 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
             </div>
             <div class="row">
               <button class="btn btn-primary" @click="saveSettings()" :disabled="saving">Save settings</button>
-              <button class="btn" @click="seedSample()" :disabled="saving">Load sample data</button>
+              <button class="btn btn-ghost" @click="seedSample()" :disabled="saving"
+                      title="8 demo articles for trying the app out — not your stock">Load 8 demo articles</button>
+            </div>
+          </div>
+
+          <div class="card card-pad stack" style="max-width:660px">
+            <h3 style="font-size:.95rem;color:#fca5a5">Start over</h3>
+            <p class="hint" style="margin:0">
+              Deletes every article, job and BOM template so you can import a clean stock list.
+              The movement ledger is <strong>not</strong> touched &mdash; it is an audit trail and
+              nothing in the app can delete it, by design. Clear that from the Firebase console if
+              you really need to.
+            </p>
+            <div class="row" style="justify-content:space-between;font-size:.85rem">
+              <span class="muted">Will be deleted</span>
+              <span class="num"
+                    x-text="`${fmt(inventory.length)} articles · ${fmt(projects.length)} jobs · ${fmt(boms.length)} templates`"></span>
+            </div>
+            <div class="row">
+              <button class="btn btn-danger" @click="wipeData()"
+                      :disabled="saving || (!inventory.length && !projects.length && !boms.length)">
+                <span x-show="saving" class="spinner"></span><span>Delete all stock data</span>
+              </button>
             </div>
           </div>
 
@@ -3161,6 +3185,50 @@ document.addEventListener("alpine:init", () => {
     },
 
     /* ---------------- sample data ---------------- */
+    /* Clear the article list, jobs and BOM templates so a fresh import lands
+       on an empty database. Movements are deliberately untouched: the rules
+       forbid deleting them for everyone, which is what makes the ledger worth
+       trusting. */
+    async wipeData() {
+      if (this.saving) return;
+      const n = this.inventory.length + this.projects.length + this.boms.length;
+      if (!n) return;
+      if (!confirm("Delete " + this.fmt(this.inventory.length) + " article(s), " +
+                   this.fmt(this.projects.length) + " job(s) and " +
+                   this.fmt(this.boms.length) + " BOM template(s)?\n\n" +
+                   "The movement ledger is kept. This cannot be undone.")) return;
+      const typed = prompt('Type DELETE to confirm.');
+      if (String(typed || "").trim().toUpperCase() !== "DELETE") {
+        this.toast("Nothing was deleted.", "ok"); return;
+      }
+
+      this.saving = true;
+      try {
+        const jobs = [
+          [collections.inventory, this.inventory],
+          [collections.projects, this.projects],
+          [collections.boms, this.boms],
+        ];
+        let gone = 0;
+        for (const [coll, list] of jobs) {
+          for (let i = 0; i < list.length; i += 300) {
+            const batch = writeBatch(db);
+            for (const row of list.slice(i, i + 300)) {
+              batch.delete(doc(db, coll, row.id));
+              gone++;
+            }
+            this.track(batch.commit(), "the deletion");
+          }
+        }
+        this.selectedHolding = "Stock";
+        this.selectedCategory = "ALL SYSTEMS";
+        this.toast(this.savedMsg("Deleted " + gone + " record(s). Import your stock list next."), "ok");
+        this.go("inventory");
+      } catch (e) {
+        this.toast("Could not clear the data: " + e.message, "err");
+      } finally { this.saving = false; }
+    },
+
     async seedSample() {
       if (this.inventory.length &&
           !confirm("Your stock list is not empty. Add the 8 sample articles anyway?")) return;
