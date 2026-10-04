@@ -156,6 +156,62 @@ h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em}
 .kpi-link:hover{border-color:var(--accent);transform:translateY(-1px)}
 .kpi-link:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .kpi-hint{font-size:.68rem;color:var(--accent);margin-top:.35rem;font-weight:600;letter-spacing:.04em}
+/* ---------------------------------------------------------------------------
+   Printing. The screen is a dark, scrolling, full-height app; paper is white,
+   fixed width and has no buttons. This turns whichever view is open into a
+   plain report: white background, black text, no navigation, no controls, and
+   tables that break sensibly across pages.
+--------------------------------------------------------------------------- */
+@media print {
+  @page { margin: 14mm 12mm; }
+  html, body { background: #fff !important; color: #000 !important; }
+  .shell { display: block !important; height: auto !important; overflow: visible !important; }
+  .main  { display: block !important; }
+  .view  { overflow: visible !important; padding: 0 !important; }
+
+  /* Anything you cannot use on paper. */
+  .sidebar, .topbar, .actions, .cell-actions, .btn, .seg, .expander,
+  .kpi-hint, .backdrop, .toasts, .banner-info, .search, .menu-btn,
+  input, select, textarea { display: none !important; }
+
+  /* Cards become plain ruled blocks. Tables must NOT avoid breaking: a long
+     one would be pushed whole onto the next page and then overflow it. */
+  .card, .kpi {
+    background: #fff !important; border: 1px solid #999 !important;
+    box-shadow: none !important; break-inside: avoid;
+  }
+  /* On screen the table scrolls sideways inside its box; on paper that box
+     would simply clip the right-hand columns, so let it size to the sheet. */
+  .table-wrap { overflow: visible !important; border: 0 !important;
+                background: #fff !important; }
+  .stack > * + * { margin-top: 10px !important; }
+  table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+  /* The actions column is buttons only, so on paper it is an empty stripe. */
+  .col-actions { display: none !important; }
+  /* Let truncated cells show their full text; paper has no tooltip. */
+  .truncate { max-width: none !important; overflow: visible !important;
+              text-overflow: clip !important; white-space: normal !important; }
+  th, td { border: 1px solid #bbb !important; padding: 3px 4px !important;
+           color: #000 !important; background: #fff !important;
+           overflow-wrap: anywhere; }
+  thead { display: table-header-group; }     /* repeat headings on every page */
+  tr { break-inside: avoid; }
+  .pill { border: 1px solid #999 !important; color: #000 !important;
+          background: #fff !important; }
+  .view-title { font-size: 15pt; }
+  .view-sub, .faint, .muted, .hint, .kpi-label, .kpi-foot { color: #333 !important; }
+  .kpi-value { color: #000 !important; }
+  .mono, .num { color: #000 !important; }
+  .row-bad td { background: #f3f3f3 !important; }
+
+  /* A printed sheet needs to say what it is and when it was run. */
+  .print-head { display: block !important; margin-bottom: 10px;
+                border-bottom: 2px solid #000; padding-bottom: 6px; }
+  .app-footnote { color: #555 !important; border-top: 1px solid #999 !important;
+                  margin-top: 12px; font-size: 8pt; }
+}
+.print-head{display:none}
+
 .app-footnote{
   margin-top:2rem;padding:1rem 0 .25rem;border-top:1px solid var(--line);
   text-align:center;font-size:.76rem;line-height:1.6;color:var(--faint);
@@ -488,6 +544,12 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
       </header>
 
       <div class="view">
+        <!-- Only ever seen on paper: says what the sheet is and when it was run. -->
+        <div class="print-head">
+          <div style="font-weight:700;font-size:13pt">Eurolux Inventory &amp; Stock Control</div>
+          <div style="font-size:9.5pt"
+               x-text="`${tabs.find(t => t.id === currentTab)?.label || ''} \u00b7 ${holdingLabel} \u00b7 printed ${new Date().toLocaleString()} \u00b7 by ${displayName}`"></div>
+        </div>
 
         <template x-if="pendingWrites > 0">
           <div class="banner banner-info" style="margin-bottom:1.1rem">
@@ -720,7 +782,9 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                            x-text="item.article_ref"></div>
                       <div style="font-size:.85rem;margin-top:.15rem" x-text="item.description"></div>
                       <div class="faint" style="font-size:.72rem;margin-top:.2rem"
-                           x-text="[item.system_ref, item.location, item.unit].filter(Boolean).join(' · ')"></div>
+                           x-text="[item.system_ref, item.location, item.unit,
+                                    isPacked(item) ? `1 ${packUnit(item)} = ${fmt(puQty(item))}` : '']
+                                   .filter(Boolean).join(' · ')"></div>
                     </div>
                     <span class="pill" :class="statusClass(item)" x-text="statusLabel(item)"></span>
                   </div>
@@ -764,7 +828,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                   <th class="right">Issued</th>
                   <th class="right">Balance</th>
                   <th>Status</th>
-                  <th class="right"><span class="faint">Actions</span></th>
+                  <th class="right col-actions"><span class="faint">Actions</span></th>
                 </tr></thead>
                 <tbody>
                   <template x-for="item in filteredInventory" :key="item.id">
@@ -776,13 +840,19 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                       <td>
                         <div x-text="item.description"></div>
                         <div class="faint" style="font-size:.72rem"
-                             x-text="[item.location, item.unit].filter(Boolean).join(' · ')"></div>
+                             x-text="[item.location, item.unit,
+                                      isPacked(item) ? `1 ${packUnit(item)} = ${fmt(puQty(item))}` : '']
+                                     .filter(Boolean).join(' · ')"></div>
                       </td>
                       <td class="right num" style="color:var(--good)" x-text="fmt(item.received_qty)"></td>
                       <td class="right num" style="color:var(--violet)" x-text="fmt(item.issued_qty)"></td>
                       <td class="right num"
-                          :style="{ fontWeight: 700, color: balanceOf(item) < 0 ? 'var(--bad)' : '' }"
-                          x-text="fmt(balanceOf(item))"></td>
+                          :style="{ fontWeight: 700, color: balanceOf(item) < 0 ? 'var(--bad)' : '' }">
+                        <div x-text="fmt(balanceOf(item))"></div>
+                        <div class="faint" style="font-size:.68rem;font-weight:400"
+                             x-show="isPacked(item) && balanceOf(item) > 0"
+                             x-text="packNote(item, balanceOf(item))"></div>
+                      </td>
                       <td><span class="pill" :class="statusClass(item)" x-text="statusLabel(item)"></span></td>
                       <td>
                         <div class="cell-actions">
@@ -982,7 +1052,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                 </div>
                 <div class="table-wrap" style="border:none;border-radius:0">
                   <table>
-                    <thead><tr><th>Name</th><th>System ref</th><th class="right">Lines</th><th class="right">Actions</th></tr></thead>
+                    <thead><tr><th>Name</th><th>System ref</th><th class="right">Lines</th><th class="right col-actions">Actions</th></tr></thead>
                     <tbody>
                       <template x-for="b in boms" :key="b.id">
                         <tr>
@@ -1091,6 +1161,167 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
         </div>
 
         <!-- ============ SETTINGS ============ -->
+        <!-- ============ DELIVERY NOTE ============ -->
+        <div id="view-delivery" x-show="currentTab==='delivery'" class="stack">
+          <div class="view-head">
+            <div>
+              <h2 class="view-title">Delivery Note</h2>
+              <p class="view-sub">Upload the supplier's delivery note and book the whole delivery in at once.</p>
+            </div>
+            <div class="actions">
+              <label class="btn btn-sm btn-primary" style="cursor:pointer">
+                <span x-show="dnBusy" class="spinner"></span>
+                <span x-text="dn.lines.length ? 'Choose another note' : 'Choose delivery note'"></span>
+                <input type="file" accept=".pdf,application/pdf" style="display:none" @change="readDeliveryNote($event)">
+              </label>
+              <button class="btn btn-sm" x-show="dn.lines.length" @click="clearDn()">Clear</button>
+            </div>
+          </div>
+
+          <template x-if="!dn.lines.length">
+            <div class="card empty">
+              <div class="empty-title">No delivery note loaded</div>
+              <div style="margin-bottom:1rem;max-width:58ch;margin-inline:auto">
+                Choose the PDF the supplier sent. The app reads the article number, the quantity
+                delivered and the pack size from each line &mdash; a line saying
+                <span class="mono">1 PKT = 100 PCE</span> with <span class="mono">1 PKT</span>
+                delivered books in 100 pieces &mdash; and shows you everything before anything is posted.
+              </div>
+              <p class="hint" style="max-width:58ch;margin-inline:auto">
+                It must be the original PDF from the supplier. A scan or a photograph of a printed
+                note has no text in it to read, so for those use Receive on each article instead.
+              </p>
+            </div>
+          </template>
+
+          <template x-if="dn.lines.length">
+            <div class="stack">
+              <div class="card">
+                <div class="card-pad">
+                  <div class="row" style="justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap">
+                    <div style="min-width:0">
+                      <h3 style="font-size:1rem" x-text="dn.ref || dn.fileName"></h3>
+                      <p class="view-sub">
+                        <span class="mono" style="font-size:.78rem" x-text="dn.fileName"></span>
+                        <span x-show="dn.dated" x-text="' \u00b7 dated ' + dn.dated"></span>
+                      </p>
+                    </div>
+                    <div class="row" style="gap:1.4rem">
+                      <div class="right">
+                        <div class="num" style="font-size:1.2rem;font-weight:700" x-text="fmt(dn.lines.length)"></div>
+                        <div class="faint" style="font-size:.7rem">LINES</div>
+                      </div>
+                      <div class="right">
+                        <div class="num" style="font-size:1.2rem;font-weight:700;color:var(--good)"
+                             x-text="fmt(dnTotalUnits)"></div>
+                        <div class="faint" style="font-size:.7rem">UNITS IN</div>
+                      </div>
+                      <div class="right">
+                        <div class="num" style="font-size:1.2rem;font-weight:700"
+                             :style="dnMissing.length ? 'color:var(--warn)' : ''" x-text="fmt(dnMissing.length)"></div>
+                        <div class="faint" style="font-size:.7rem">WILL BE CREATED</div>
+                      </div>
+                      <div class="right">
+                        <div class="num" style="font-size:1.2rem;font-weight:700"
+                             :style="dnPackChanges.length ? 'color:var(--accent)' : ''" x-text="fmt(dnPackChanges.length)"></div>
+                        <div class="faint" style="font-size:.7rem">PACK SIZE NEW</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="grid-2" style="margin-top:1rem">
+                    <div class="field">
+                      <label class="label">Receive into *</label>
+                      <select id="dn-holding" class="select" x-model="dn.holding">
+                        <option value="Stock">Main stock</option>
+                        <template x-for="h in holdings.filter(x => x !== 'Stock')" :key="h">
+                          <option :value="h" x-text="'Allocated to ' + h"></option>
+                        </template>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="label">Note</label>
+                      <input class="input" x-model.trim="dn.note"
+                             :placeholder="dn.ref ? dn.ref + ' \u2014 add anything else' : 'e.g. received by Rafiq'">
+                    </div>
+                  </div>
+                  <label class="row" style="gap:.5rem;cursor:pointer">
+                    <input type="checkbox" x-model="dnSavePacks">
+                    <span>Save the pack sizes on the note to each article</span>
+                  </label>
+                </div>
+              </div>
+
+              <template x-if="dnMissing.length">
+                <div class="banner banner-warn">
+                  <div>
+                    <strong x-text="`${fmt(dnMissing.length)} article(s) are not in your stock list.`"></strong>
+                    They will be created in
+                    <strong x-text="dn.holding === 'Stock' ? 'main stock' : dn.holding"></strong>
+                    with the description and pack size from the note:
+                    <span class="mono" style="font-size:.78rem"
+                          x-text="dnMissing.slice(0,8).map(l => l.art).join(', ') + (dnMissing.length > 8 ? '…' : '')"></span>
+                  </div>
+                </div>
+              </template>
+
+              <div class="card">
+                <div class="card-pad" style="border-bottom:1px solid var(--line)">
+                  <h3 style="font-size:.95rem">What will be received</h3>
+                  <p class="view-sub">Every figure is editable. Set a line to zero to leave it out.</p>
+                </div>
+                <div class="table-wrap" style="border:none;border-radius:0">
+                  <table>
+                    <thead><tr>
+                      <th>Line</th><th>Article</th><th>Description</th>
+                      <th class="right">Delivered</th><th>Pack</th>
+                      <th class="right">PU Qty</th><th class="right">Units in</th>
+                      <th class="right">On hand</th><th class="right">After</th><th>Stock</th>
+                    </tr></thead>
+                    <tbody>
+                      <template x-for="l in dn.lines" :key="l.line + l.art">
+                        <tr>
+                          <td class="faint" x-text="l.line"></td>
+                          <td class="mono" style="color:var(--accent);font-weight:700" x-text="l.art"></td>
+                          <td class="truncate" style="max-width:230px" x-text="l.desc"></td>
+                          <td class="right">
+                            <input class="input num" type="number" min="0" step="any"
+                                   style="max-width:92px;margin-left:auto"
+                                   :value="l.qty" @input="l.qty = num($event.target.value)">
+                          </td>
+                          <td class="faint" x-text="l.unit || '—'"></td>
+                          <td class="right">
+                            <input class="input num" type="number" min="1" step="any"
+                                   style="max-width:92px;margin-left:auto"
+                                   :value="l.pu" @input="l.pu = Math.max(1, num($event.target.value))">
+                          </td>
+                          <td class="right num" style="font-weight:700" x-text="fmt(dnUnits(l))"></td>
+                          <td class="right num muted"
+                              x-text="dnItem(l.art) ? fmt(balanceOf(dnItem(l.art))) : '—'"></td>
+                          <td class="right num" style="color:var(--good);font-weight:700"
+                              x-text="fmt((dnItem(l.art) ? balanceOf(dnItem(l.art)) : 0) + dnUnits(l))"></td>
+                          <td>
+                            <span class="pill" :class="dnItem(l.art) ? 'pill-good' : 'pill-warn'"
+                                  x-text="dnItem(l.art) ? 'known' : 'new'"></span>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="card-pad" style="border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
+                  <span class="faint" style="font-size:.82rem"
+                        x-text="`${fmt(dnActive.length)} line(s) will post, ${fmt(dnTotalUnits)} units in total`"></span>
+                  <button class="btn btn-primary" @click="postDeliveryNote()"
+                          :disabled="dnPosting || !dnActive.length">
+                    <span x-show="dnPosting" class="spinner"></span><span>Receive into stock</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+
         <!-- ============ MTO IMPORT ============ -->
         <div id="view-mto" x-show="currentTab==='mto'" class="stack">
           <div class="view-head">
@@ -1446,7 +1677,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                       <th x-show="selectedHolding==='ALL'">Held for</th>
                       <th>System</th><th>Article</th><th>Description</th><th>Unit</th>
                       <th class="right">Balance</th><th class="right">Minimum</th>
-                      <th class="right">Order at least</th><th>Status</th><th class="right">Actions</th>
+                      <th class="right">Order at least</th><th>Status</th><th class="right col-actions">Actions</th>
                     </tr></thead>
                     <tbody>
                       <template x-for="i in reportRows" :key="i.id">
@@ -1463,7 +1694,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                           <td class="right num" style="color:var(--bad);font-weight:700"
                               x-text="fmt(Math.max(0, reorderLevel(i) - balanceOf(i)))"></td>
                           <td><span class="pill" :class="statusClass(i)" x-text="statusLabel(i)"></span></td>
-                          <td class="right">
+                          <td class="right col-actions">
                             <div class="cell-actions">
                               <button class="btn btn-sm" @click="openMove(i,'receive')">Receive</button>
                               <button class="btn btn-sm btn-ghost" @click="openItem(i)">Edit</button>
@@ -1609,8 +1840,9 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
             </div>
             <div class="grid-3">
               <div class="field">
-                <label class="label">Unit</label>
-                <input class="input" x-model.trim="itemForm.unit" placeholder="bars / packets / sets">
+                <label class="label">Stock unit</label>
+                <input class="input" x-model.trim="itemForm.unit" placeholder="NO / M / BAR">
+                <span class="hint">What the balance counts: pieces, metres or bars.</span>
               </div>
               <div class="field">
                 <label class="label">Location</label>
@@ -1620,6 +1852,35 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                 <label class="label">Reorder level</label>
                 <input class="input num" type="number" min="0" step="any" x-model.number="itemForm.min_qty">
                 <span class="hint" x-text="`0 = use default (${fmt(settings.shortageThreshold)})`"></span>
+              </div>
+            </div>
+
+            <div class="grid-3">
+              <div class="field">
+                <label class="label">PU Qty</label>
+                <input class="input num" type="number" min="0" step="any" x-model.number="itemForm.pu_qty"
+                       placeholder="1">
+                <span class="hint">How many stock units are in one pack. 100 for a packet of 100
+                  screws, 200 for a 200 m box of gasket. Leave at 1 for loose items and bars.</span>
+              </div>
+              <div class="field">
+                <label class="label">Pack called</label>
+                <select class="select" x-model="itemForm.pack_unit">
+                  <option value="PKT">PKT &mdash; packet</option>
+                  <option value="BOX">BOX</option>
+                  <option value="ROLL">ROLL</option>
+                  <option value="SET">SET</option>
+                  <option value="BUNDLE">BUNDLE</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="label">Reads as</label>
+                <div class="input" style="display:flex;align-items:center;background:var(--bg-2)">
+                  <span class="faint" style="font-size:.82rem"
+                        x-text="num(itemForm.pu_qty) > 1
+                                ? `1 ${itemForm.pack_unit || 'PKT'} = ${fmt(itemForm.pu_qty)} ${itemForm.unit || 'units'}`
+                                : 'Not packed'"></span>
+                </div>
               </div>
             </div>
             <template x-if="!itemForm.id">
@@ -1678,9 +1939,37 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
               </div>
             </div>
 
-            <div class="field">
-              <label class="label">Quantity *</label>
+            <template x-if="moveForm.pu_qty > 1">
+              <div class="field">
+                <label class="label">Enter as</label>
+                <div class="seg">
+                  <button type="button" :class="moveForm.entry==='pack' && 'on'"
+                          @click="moveForm.entry='pack'"
+                          x-text="moveForm.pack_unit + 's of ' + fmt(moveForm.pu_qty)"></button>
+                  <button type="button" :class="moveForm.entry==='unit' && 'on'"
+                          @click="moveForm.entry='unit'"
+                          x-text="moveForm.unit || 'units'"></button>
+                </div>
+              </div>
+            </template>
+
+            <div class="field" x-show="moveForm.pu_qty > 1 && moveForm.entry === 'pack'">
+              <label class="label" x-text="`Number of ${moveForm.pack_unit}s *`"></label>
+              <input class="input num" type="number" min="0" step="any"
+                     x-model.number="moveForm.packs" @input="moveForm.qty = num(moveForm.packs) * moveForm.pu_qty"
+                     placeholder="0">
+              <span class="hint"
+                    x-text="num(moveForm.packs) > 0
+                      ? `${fmt(moveForm.packs)} \u00d7 ${fmt(moveForm.pu_qty)} = ${fmt(num(moveForm.packs) * moveForm.pu_qty)} ${moveForm.unit || 'units'} will be posted`
+                      : `Each ${moveForm.pack_unit} holds ${fmt(moveForm.pu_qty)} ${moveForm.unit || 'units'}.`"></span>
+            </div>
+
+            <div class="field" x-show="!(moveForm.pu_qty > 1 && moveForm.entry === 'pack')">
+              <label class="label" x-text="`Quantity${moveForm.unit ? ' in ' + moveForm.unit : ''} *`"></label>
               <input class="input num" type="number" min="0" step="any" x-model.number="moveForm.qty" required placeholder="0">
+              <template x-if="moveForm.pu_qty > 1 && num(moveForm.qty) > 0">
+                <span class="hint" x-text="`= ${packNote(moveForm, moveForm.qty)}`"></span>
+              </template>
               <template x-if="moveForm.type==='issue' && moveForm.qty > moveForm.on_hand">
                 <span class="hint" style="color:var(--warn)">
                   This issues more than the recorded balance and will leave a negative stock position.
@@ -1976,7 +2265,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
               <div class="table-wrap" style="max-height:46vh;overflow:auto">
                 <table>
                   <thead><tr>
-                    <th>Article</th><th>Description</th><th>Unit</th>
+                    <th>Article</th><th>Description</th><th>Unit</th><th class="right">PU Qty</th>
                     <th class="right">On hand</th><th class="right">Minimum</th><th class="right">Book qty</th>
                   </tr></thead>
                   <tbody>
@@ -1985,9 +2274,15 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                         <td class="mono" style="color:var(--accent);font-weight:700" x-text="i.article_ref"></td>
                         <td class="truncate" style="max-width:260px" x-text="i.description"></td>
                         <td class="faint" x-text="i.unit || '—'"></td>
+                        <td class="right num faint"
+                            x-text="isPacked(i) ? `${fmt(puQty(i))} / ${packUnit(i)}` : '—'"></td>
                         <td class="right num" style="font-weight:700"
-                            :style="balanceOf(i) <= 0 ? 'color:var(--bad);font-weight:700' : 'font-weight:700'"
-                            x-text="fmt(balanceOf(i))"></td>
+                            :style="balanceOf(i) <= 0 ? 'color:var(--bad);font-weight:700' : 'font-weight:700'">
+                          <div x-text="fmt(balanceOf(i))"></div>
+                          <div class="faint" style="font-size:.68rem;font-weight:400"
+                               x-show="isPacked(i) && balanceOf(i) > 0"
+                               x-text="packNote(i, balanceOf(i))"></div>
+                        </td>
                         <td class="right num muted" x-text="fmt(reorderLevel(i))"></td>
                         <td class="right">
                           <input class="input num" type="number" min="0" step="any"
@@ -2270,6 +2565,113 @@ function mtoStockUnit(line) {
   return line.unit || "NO";
 }
 
+/* ---------------------------------------------------------------------------
+   Delivery note reader  (Schuco "Store issue voucher" PDF)
+   ---------------------------------------------------------------------------
+   The voucher is a text PDF with one block per line item:
+
+     1.00   467860   T-cleat profile 8,2
+                     Size: 6000 mm        1 PCE     6.00 M     4.140 kg
+                     Reference: 7035103
+     6.00   277098   Keep Basis S 200kg IW
+                     1 PKT = 50 PCE       1 PKT                1.040 kg
+
+   So the delivered quantity, and the pack size where the material is packed,
+   are both stated on the page. We read text positions out of the PDF and
+   rebuild the visual lines, because the quantity only makes sense next to its
+   row.
+--------------------------------------------------------------------------- */
+let _pdfjsPromise = null;
+function loadPdfReader() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (!_pdfjsPromise) {
+    _pdfjsPromise = new Promise((resolve, reject) => {
+      const tag = document.createElement("script");
+      tag.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+      tag.onload = () => {
+        if (!window.pdfjsLib) return reject(new Error("The PDF reader did not load."));
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        resolve(window.pdfjsLib);
+      };
+      tag.onerror = () => reject(new Error(
+        "Could not load the PDF reader. It needs a connection the first time; " +
+        "after that it is cached on this device."));
+      document.head.appendChild(tag);
+    });
+  }
+  return _pdfjsPromise;
+}
+
+/* Rebuild the page's visual lines from the positioned text items. */
+async function pdfToLines(pdfjsLib, buffer) {
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+  const lines = [];
+  for (let n = 1; n <= doc.numPages; n++) {
+    const content = await (await doc.getPage(n)).getTextContent();
+    const rows = new Map();
+    for (const item of content.items) {
+      if (!String(item.str).trim()) continue;
+      const y = Math.round(item.transform[5]);
+      let key = [...rows.keys()].find((k) => Math.abs(k - y) <= 2);
+      if (key === undefined) { key = y; rows.set(key, []); }
+      rows.get(key).push({ x: item.transform[4], s: item.str });
+    }
+    [...rows.entries()].sort((a, b) => b[0] - a[0]).forEach(([, items]) => {
+      lines.push(items.sort((a, b) => a.x - b.x)
+        .map((i) => i.s).join(" ").replace(/\s+/g, " ").trim());
+    });
+  }
+  return lines;
+}
+
+function parseDeliveryNote(lines) {
+  let ref = "", dated = "";
+  for (let i = 0; i < Math.min(lines.length, 40); i++) {
+    const m = lines[i].match(/\b([A-Z]{2,4}\d{5,})\s*\/\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+    if (m) { ref = m[1]; dated = m[2]; break; }
+  }
+  if (!ref) {
+    for (const ln of lines.slice(0, 40)) {
+      const m = ln.match(/\b([A-Z]{2,4}\d{5,})\b/);
+      if (m) { ref = m[1]; break; }
+    }
+  }
+
+  const ROW = /^(\d+\.\d{2})\s+(\d{5,9})\s+(.*)$/;
+  const items = [];
+  let cur = null;
+  const flush = () => { if (cur && cur.qty > 0) items.push(cur); cur = null; };
+
+  for (const ln of lines) {
+    const m = ln.match(ROW);
+    if (m) {
+      flush();
+      cur = { line: m[1], art: m[2], desc: m[3].trim(),
+              qty: 0, unit: "", pu: 1, metres: 0, barLen: 0 };
+      continue;
+    }
+    if (!cur) continue;
+
+    const pack = ln.match(/1\s*(PKT|PACK|BOX|ROLL|SET)\s*=\s*([\d.,]+)\s*(?:PCE|PCS|M)\b/i);
+    if (pack) { cur.pu = num(String(pack[2]).replace(/,/g, "")); cur.packName = pack[1].toUpperCase(); }
+
+    const size = ln.match(/Size:\s*([\d.,]+)\s*mm/i);
+    if (size) cur.barLen = num(String(size[1]).replace(/,/g, ""));
+
+    /* Drop the "1 PKT = 50 PCE" phrase first, or it reads as the delivered
+       quantity and every packed line comes in as one. */
+    const rest = ln.replace(/1\s*(?:PKT|PACK|BOX|ROLL|SET)\s*=\s*[\d.,]+\s*(?:PCE|PCS|M)\b/ig, " ");
+    const q = rest.match(/(?:^|\s)([\d.,]+)\s+(PCE|PCS|PKT|PACK|BOX|ROLL|PAIR|SET)\b/i);
+    if (q && !cur.qty) { cur.qty = num(String(q[1]).replace(/,/g, "")); cur.unit = q[2].toUpperCase(); }
+
+    const me = rest.match(/(?:^|\s)([\d.,]+)\s+M\b/);
+    if (me && !cur.metres) cur.metres = num(String(me[1]).replace(/,/g, ""));
+  }
+  flush();
+  return { ref, dated, items };
+}
+
 function parseMto(aoa) {
   const norm = (v) => String(v ?? "").trim();
   const low  = (v) => norm(v).toLowerCase();
@@ -2402,6 +2804,8 @@ document.addEventListener("alpine:init", () => {
     mto: { fileName: "", project: "", dated: "", lines: [], system: "", systemGuessed: false,
            holding: "Stock", projectId: "", note: "", tag: "" },
     mtoBusy: false, mtoPosting: false, mtoSearch: "",
+    dn: { fileName: "", ref: "", dated: "", lines: [], holding: "Stock", note: "", tag: "" },
+    dnBusy: false, dnPosting: false, dnSavePacks: true,
     bookOpen: false, bookNewProject: false, bookSearch: "",
     book: { projectId: "", newProject: "", system: "", holding: "Stock", note: "", picked: {} },
     levelsOpen: false, levelsForm: { system: "", value: 0, onlyBlank: true },
@@ -2419,6 +2823,8 @@ document.addEventListener("alpine:init", () => {
         icon: '<path d="M12 3l2.1 4.6 5 .6-3.7 3.4 1 5-4.4-2.5L7.6 16.6l1-5L4.9 8.2l5-.6z"/>' },
       { id: "projects", label: "Villa Projects",
         icon: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/>' },
+      { id: "delivery", label: "Delivery Note",
+        icon: '<path d="M3 7h13v10H3z"/><path d="M16 10h4l1.5 3v4H16z"/><circle cx="7" cy="18" r="1.6"/><circle cx="18" cy="18" r="1.6"/>' },
       { id: "mto", label: "MTO Import",
         icon: '<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6"/><path d="M9.5 14.5L12 17l2.5-2.5"/>' },
       { id: "reports", label: "Reports",
@@ -2448,6 +2854,33 @@ document.addEventListener("alpine:init", () => {
        keyed by article AND holding.
     -------------------------------------------------------------------- */
     holdingOf(item) { return (item && item.holding) || "Stock"; },
+
+    /* --- packing units ----------------------------------------------------
+       Stock is counted in base units: pieces, metres, bars. A pack is how the
+       material ARRIVES \u2014 a packet of 100 screws, a 200 m box of gasket \u2014 so
+       PU Qty only ever converts a delivery into base units and gives people a
+       familiar way to read a balance back. pu_qty of 0 or 1 means the article
+       is not packed and nothing converts.
+    -------------------------------------------------------------------- */
+    puQty(item) {
+      const n = num(item && item.pu_qty);
+      return n > 1 ? n : 1;
+    },
+    packUnit(item) { return (item && item.pack_unit) || "PKT"; },
+    isPacked(item) { return this.puQty(item) > 1; },
+    /* "1,400 (14 PKT of 100)" \u2014 the second half only when it helps. */
+    packNote(item, qty) {
+      const per = this.puQty(item);
+      if (per <= 1) return "";
+      const packs = num(qty) / per;
+      const whole = Math.floor(packs + 1e-9);
+      const rest = num(qty) - whole * per;
+      const u = this.packUnit(item);
+      if (!whole && !rest) return "";
+      if (!rest) return whole + " " + u + " of " + this.fmt(per);
+      if (!whole) return this.fmt(rest) + " loose";
+      return whole + " " + u + " of " + this.fmt(per) + " + " + this.fmt(rest);
+    },
     get holdings() {
       const set = new Set(this.inventory.map((i) => this.holdingOf(i)));
       set.add("Stock");
@@ -2623,6 +3056,161 @@ document.addEventListener("alpine:init", () => {
       if (rows.length === 1) { this.toast("Nothing to export here.", "err"); return; }
       downloadCsv(rows, "eurolux-" + (this.report === "negative" ? "negative" : "below-minimum") +
                   "-" + new Date().toISOString().slice(0, 10) + ".csv");
+    },
+
+    /* ---- delivery note --------------------------------------------------- */
+    clearDn() {
+      this.dn = { fileName: "", ref: "", dated: "", lines: [], holding: "Stock", note: "", tag: "" };
+      this.dnSavePacks = true;
+    },
+    dnItem(article) {
+      return this.inventory.find((i) =>
+        key(i.article_ref) === key(article) &&
+        key(this.holdingOf(i)) === key(this.dn.holding)) || null;
+    },
+    /* A packed line delivers qty x pack size; a loose line delivers qty. */
+    dnUnits(line) {
+      const packed = /^(PKT|PACK|BOX|ROLL|SET)$/.test(String(line.unit || "").toUpperCase());
+      return num(line.qty) * (packed ? Math.max(1, num(line.pu)) : 1);
+    },
+    get dnActive() { return this.dn.lines.filter((l) => this.dnUnits(l) > 0); },
+    get dnTotalUnits() { return this.dnActive.reduce((a, l) => a + this.dnUnits(l), 0); },
+    get dnMissing() { return this.dnActive.filter((l) => !this.dnItem(l.art)); },
+    /* Lines whose pack size differs from what the article already carries. */
+    get dnPackChanges() {
+      return this.dnActive.filter((l) => {
+        if (!(num(l.pu) > 1)) return false;
+        const item = this.dnItem(l.art);
+        return !item || this.puQty(item) !== num(l.pu);
+      });
+    },
+
+    async readDeliveryNote(event) {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = "";
+      if (!file) return;
+      this.dnBusy = true;
+      try {
+        const pdfjsLib = await loadPdfReader();
+        const lines = await pdfToLines(pdfjsLib, await file.arrayBuffer());
+        const parsed = parseDeliveryNote(lines);
+        if (!parsed.items.length) {
+          this.toast("No delivery lines were found in that PDF. If it is a scan or a photo " +
+                     "there is no text to read — use Receive on each article instead.", "err");
+          return;
+        }
+        this.dn = {
+          fileName: file.name, ref: parsed.ref, dated: parsed.dated,
+          lines: parsed.items, holding: "Stock", note: "",
+          tag: "DN:" + (parsed.ref || file.name),
+        };
+        if (this.dn.tag && this.importsDone[this.dn.tag]) {
+          this.toast('"' + (parsed.ref || file.name) + '" was already received on ' +
+                     String(this.importsDone[this.dn.tag]).slice(0, 10) +
+                     ". Posting it again will book the delivery in twice.", "err");
+        }
+        this.toast("Read " + parsed.items.length + " line(s) from " +
+                   (parsed.ref || file.name) + ".", "ok");
+      } catch (e) {
+        this.toast("Could not read that delivery note: " + e.message, "err");
+      } finally { this.dnBusy = false; }
+    },
+
+    async postDeliveryNote() {
+      if (this.dnPosting) return;
+      const lines = this.dnActive;
+      if (!lines.length) return;
+
+      if (this.dn.tag && this.importsDone[this.dn.tag] &&
+          !confirm("This delivery note was already received on " +
+                   String(this.importsDone[this.dn.tag]).slice(0, 10) +
+                   ".\n\nPosting it again books every quantity in a second time.\n\nPost anyway?")) return;
+
+      const missing = this.dnMissing;
+      if (!confirm("Receive " + lines.length + " line(s), " + this.fmt(this.dnTotalUnits) +
+                   " units, into " + (this.dn.holding === "Stock" ? "main stock" : this.dn.holding) + "?" +
+                   (missing.length ? "\n\n" + missing.length + " new article(s) will be created." : "") +
+                   "\n\nThis posts to the ledger and cannot be undone from inside the app.")) return;
+
+      this.dnPosting = true;
+      try {
+        const created = new Map();
+        const first = writeBatch(db);
+        for (const l of missing) {
+          const ref = doc(collection(db, collections.inventory));
+          first.set(ref, {
+            article_ref: l.art, description: l.desc || l.art,
+            system_ref: "", holding: this.dn.holding,
+            unit: l.barLen ? "BAR" : "NO",
+            pu_qty: num(l.pu) > 1 ? num(l.pu) : 1,
+            pack_unit: l.packName || "PKT",
+            location: "", min_qty: 0,
+            received_qty: 0, issued_qty: 0, balance_stock_qty: 0,
+            createdAt: serverTimestamp(), createdBy: this.displayName,
+            updatedAt: serverTimestamp(), updatedBy: this.displayName,
+          });
+          created.set(key(l.art), ref.id);
+        }
+        if (created.size) this.track(first.commit(), "the new articles");
+
+        const note = ["DN " + (this.dn.ref || this.dn.fileName), this.dn.note]
+          .filter(Boolean).join(" — ");
+
+        /* One article can appear on two lines of the same note, so fold them
+           together before touching the balance. */
+        const delta = new Map();
+        for (const l of lines) {
+          const item = this.dnItem(l.art);
+          const id = item ? item.id : created.get(key(l.art));
+          if (!id) continue;
+          const d = delta.get(id) || { qty: 0, line: l, item };
+          d.qty += this.dnUnits(l);
+          if (num(l.pu) > 1) d.pu = num(l.pu);
+          delta.set(id, d);
+        }
+
+        const entries = [...delta.entries()];
+        for (let i = 0; i < entries.length; i += 150) {
+          const batch = writeBatch(db);
+          for (const [id, d] of entries.slice(i, i + 150)) {
+            const fields = {
+              received_qty: increment(d.qty),
+              balance_stock_qty: increment(d.qty),
+              updatedAt: serverTimestamp(), updatedBy: this.displayName,
+            };
+            /* The note states the pack size, so it is the better record. */
+            if (this.dnSavePacks && d.pu > 1) {
+              fields.pu_qty = d.pu;
+              if (d.line.packName) fields.pack_unit = d.line.packName;
+            }
+            batch.update(doc(db, collections.inventory, id), fields);
+            batch.set(doc(collection(db, collections.movements)), {
+              item_id: id, article_ref: d.line.art,
+              description: (d.item && d.item.description) || d.line.desc || "",
+              system_ref: (d.item && d.item.system_ref) || "",
+              holding: this.dn.holding,
+              type: "receive", qty: d.qty,
+              project_id: "", project_code: "",
+              note, at: serverTimestamp(),
+              by: this.authUser.uid, by_name: this.displayName,
+            });
+          }
+          this.track(batch.commit(), "the delivery");
+        }
+
+        if (this.dn.tag) {
+          this.track(setDoc(doc(db, collections.settings, "imports"),
+            { [this.dn.tag]: new Date().toISOString() }, { merge: true }), "the import record");
+        }
+
+        const n = entries.length, made = created.size, units = this.dnTotalUnits;
+        this.clearDn();
+        this.toast(this.savedMsg("Delivery received — " + this.fmt(units) + " units across " +
+                   n + " article(s)" + (made ? ", " + made + " created" : "") + "."), "ok");
+        this.go("inventory");
+      } catch (e) {
+        this.toast("Could not post the delivery: " + e.message, "err");
+      } finally { this.dnPosting = false; }
     },
 
     /* ---- MTO import ------------------------------------------------------ */
@@ -3186,6 +3774,9 @@ document.addEventListener("alpine:init", () => {
       history.replaceState(null, "", "#" + tab);
     },
     fmt(v) { return nf.format(num(v)); },
+    /* Alpine evaluates markup against the component, so a helper used in a
+       template has to live on it \u2014 a module-scope function is invisible there. */
+    num,
     balanceOf(item) { return num(item.received_qty) - num(item.issued_qty); },
     reorderLevel(item) {
       const own = num(item.min_qty);
@@ -3387,7 +3978,8 @@ document.addEventListener("alpine:init", () => {
         ? { ...item }
         : { article_ref: "", system_ref: "", description: "", unit: "bars",
             holding: this.selectedHolding === "ALL" ? "Stock" : this.selectedHolding,
-            location: "", min_qty: 0, received_qty: 0 };
+            location: "", min_qty: 0, received_qty: 0,
+            pu_qty: 1, pack_unit: "PKT" };
       this.itemSystemNew = false;
       this.itemOpen = true;
     },
@@ -3397,9 +3989,19 @@ document.addEventListener("alpine:init", () => {
       const f = this.itemForm;
       if (!f.article_ref || !f.description) return;
 
+      /* An article is unique within its holding, not across the whole list:
+         the same code can sit in main stock and against a villa at the same
+         time, and those are two separate records. */
+      const holding = f.holding || "Stock";
       const dup = this.inventory.find(
-        (i) => key(i.article_ref) === key(f.article_ref) && i.id !== f.id);
-      if (dup) { this.toast("Article " + f.article_ref + " already exists in the stock list.", "err"); return; }
+        (i) => key(i.article_ref) === key(f.article_ref) &&
+               key(this.holdingOf(i)) === key(holding) &&
+               i.id !== f.id);
+      if (dup) {
+        this.toast("Article " + f.article_ref + " already exists in " +
+                   (holding === "Stock" ? "main stock" : holding) + ".", "err");
+        return;
+      }
 
       this.saving = true;
       try {
@@ -3410,6 +4012,9 @@ document.addEventListener("alpine:init", () => {
           unit: f.unit || "",
           location: f.location || "",
           min_qty: num(f.min_qty),
+          holding: f.holding || "Stock",
+          pu_qty: num(f.pu_qty) > 1 ? num(f.pu_qty) : 1,
+          pack_unit: f.pack_unit || "PKT",
           updatedAt: serverTimestamp(),
           updatedBy: this.displayName,
         };
@@ -3463,7 +4068,14 @@ document.addEventListener("alpine:init", () => {
         article_ref: item.article_ref,
         description: item.description,
         system_ref: item.system_ref || "",
+        unit: item.unit || "",
+        pu_qty: this.puQty(item),
+        pack_unit: this.packUnit(item),
         on_hand: this.balanceOf(item),
+        /* Deliveries arrive in packs, production takes pieces, so a packed
+           article opens in packs to receive and in base units to issue. */
+        entry: type === "receive" && this.isPacked(item) ? "pack" : "unit",
+        packs: null,
         type, qty: null, project_id: "", note: "",
       };
       this.moveOpen = true;
@@ -3678,10 +4290,12 @@ document.addEventListener("alpine:init", () => {
 
     /* ---------------- CSV ---------------- */
     exportCsv() {
-      const header = ["holding", "system_ref", "article_ref", "description", "unit", "location",
+      const header = ["holding", "system_ref", "article_ref", "description", "unit", "pu_qty",
+                      "pack_unit", "location",
                       "min_qty", "received_qty", "issued_qty", "balance_stock_qty"];
       const rows = [header].concat(this.filteredInventory.map((i) => [
-        this.holdingOf(i), i.system_ref || "", i.article_ref, i.description, i.unit || "", i.location || "",
+        this.holdingOf(i), i.system_ref || "", i.article_ref, i.description, i.unit || "",
+        this.puQty(i), this.packUnit(i), i.location || "",
         num(i.min_qty), num(i.received_qty), num(i.issued_qty), this.balanceOf(i),
       ]));
       downloadCsv(rows, "eurolux-stock-" + new Date().toISOString().slice(0, 10) + ".csv");
@@ -3757,6 +4371,8 @@ document.addEventListener("alpine:init", () => {
       const cDesc = col("description", "desc", "material_description"),
             cSys  = col("system_ref", "system"),
             cHold = col("holding", "project_ref", "stock_location"),
+            cPu   = col("pu_qty", "pack_qty", "qty_per_pack", "pack_size"),
+            cPack = col("pack_unit", "pack_name"),
             cUnit = col("unit"), cLoc = col("location"),
             cMin  = col("min_qty", "reorder", "reorder_level"),
             cRec  = col("received_qty", "received"),
@@ -3793,6 +4409,10 @@ document.addEventListener("alpine:init", () => {
             unit: cUnit >= 0 ? String(r[cUnit] ?? "").trim() : ((existing && existing.unit) || ""),
             location: cLoc >= 0 ? String(r[cLoc] ?? "").trim() : ((existing && existing.location) || ""),
             min_qty: cMin >= 0 ? num(r[cMin]) : num(existing && existing.min_qty),
+            pu_qty: cPu >= 0 ? (num(r[cPu]) > 1 ? num(r[cPu]) : 1)
+                             : (existing ? this.puQty(existing) : 1),
+            pack_unit: cPack >= 0 ? (String(r[cPack] ?? "").trim() || "PKT")
+                                  : (existing ? this.packUnit(existing) : "PKT"),
             updatedAt: serverTimestamp(),
             updatedBy: this.displayName,
           };

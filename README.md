@@ -157,6 +157,43 @@ sign in. Everything after that works offline.
 
 ## Using it
 
+### Packing units
+
+Stock is counted in **base units**: pieces, metres, bars. A pack is how the
+material arrives — a packet of 100 screws, a 200 m box of gasket — so each
+article carries a **PU Qty** (how many base units are in one pack) and a pack
+name (PKT, BOX, ROLL...). PU Qty of 1 means the article is not packed.
+
+PU Qty does two things and nothing else:
+
+- **Receiving.** A packed article opens the Receive dialog in packs. Enter 3
+  and it posts 3 x 100 = 300 pieces, showing the arithmetic first. Switch to
+  the other tab to type base units instead.
+- **Reading a balance back.** A balance of 2,905 shows "29 PKT of 100 + 5"
+  underneath, so a storekeeper can tie it to what is on the shelf.
+
+Issuing and the MTO import always work in base units, because that is what
+production consumes: 20 m off a 200 m box, or 16 screws out of a packet of 100.
+
+### Importing a delivery note
+
+**Delivery Note** reads the supplier's PDF — a Schuco "Store issue voucher" —
+and books the whole delivery in at once. Each line states the article, the
+quantity and, where the material is packed, the pack size:
+
+```
+13.00   218779   Connector nail 5x9
+                 1 PKT = 100 PCE      1 PKT
+```
+
+so one packet books in 100 pieces. Articles that appear on two lines of the
+same note are added together. Anything not in your stock list is created, and
+the pack sizes on the note are saved to each article unless you untick that
+box, so PU Qty fills itself in as deliveries arrive.
+
+It must be the original PDF. A scan or a photo of a printed note has no text in
+it to read; use Receive on each article for those.
+
 ### Two holdings
 
 Stock lives in two kinds of place, exactly as your master workbook keeps it:
@@ -329,6 +366,12 @@ minimum levels** applies a minimum to a whole system at once — doing it one
 article at a time is unusable across a list this size. Tick "only articles that
 have no minimum set yet" to fill the gaps without overwriting minimums you have
 already tuned.
+
+**Printing.** Set a page up on screen — holding, report, groups open, search
+applied — then press Ctrl+P (Cmd+P on a Mac). The app has a print stylesheet:
+the menu, buttons and action columns drop out, the dark theme becomes plain
+black on white, table headings repeat on every page, and a heading is added
+showing the page, the holding, the date and who printed it.
 
 All three export to CSV, and the four tiles at the top are clickable: Systems
 expands or collapses every group, On Hand opens the stock list, and Below
