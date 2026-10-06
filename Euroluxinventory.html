@@ -870,6 +870,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                         </span>
                         <span x-show="!isPacked(item) && isBar(item)" class="faint"
                               style="font-size:.74rem;white-space:nowrap"
+                              :title="barLenLabel(item) + ' bars'"
                               x-text="barLabel(item) + ' bar'"></span>
                       </td>
                       <td class="right num" style="color:var(--good)" x-text="fmt(item.received_qty)"></td>
@@ -955,7 +956,11 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                       <td class="faint" style="white-space:nowrap" x-text="when(m.at)"></td>
                       <td><span class="pill" :class="moveClass(m.type)" x-text="m.type"></span></td>
                       <td class="mono" style="color:var(--accent)" x-text="m.article_ref"></td>
-                      <td class="muted truncate" style="max-width:240px" x-text="m.description || '—'"></td>
+                      <td class="muted truncate" style="max-width:240px">
+                        <span x-text="m.description || '—'"></span>
+                        <span class="faint" style="font-size:.7rem" x-show="m.length_mm"
+                              x-text="' · ' + fmt(m.length_mm) + ' mm asked'"></span>
+                      </td>
                       <td class="right num" x-text="moveSign(m)+fmt(m.qty)"></td>
                       <td class="faint truncate" style="max-width:150px" x-text="m.holding || 'Stock'"></td>
                       <td class="muted" x-text="m.project_code || '—'"></td>
@@ -2074,7 +2079,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                 <span class="muted" x-show="moveForm.on_order > 0">On order:
                   <strong class="num" style="color:var(--warn)" x-text="fmt(moveForm.on_order)"></strong></span>
                 <span class="muted" x-show="moveForm.bar_length > 0">Bar:
-                  <strong x-text="barLabel(moveForm)"></strong></span>
+                  <strong x-text="barLenLabel(moveForm)"></strong></span>
               </div>
             </div>
 
@@ -2088,19 +2093,38 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
               </div>
             </div>
 
-            <template x-if="moveForm.pu_qty > 1">
+            <template x-if="moveForm.pu_qty > 1 || moveForm.bar_length > 0">
               <div class="field">
                 <label class="label">Enter as</label>
                 <div class="seg">
-                  <button type="button" :class="moveForm.entry==='pack' && 'on'"
+                  <button type="button" x-show="moveForm.pu_qty > 1"
+                          :class="moveForm.entry==='pack' && 'on'"
                           @click="moveForm.entry='pack'"
                           x-text="moveForm.pack_unit + 's of ' + fmt(moveForm.pu_qty)"></button>
                   <button type="button" :class="moveForm.entry==='unit' && 'on'"
                           @click="moveForm.entry='unit'"
                           x-text="moveForm.unit || 'units'"></button>
+                  <button type="button" x-show="moveForm.bar_length > 0"
+                          :class="moveForm.entry==='mm' && 'on'"
+                          @click="moveForm.entry='mm'">mm</button>
                 </div>
+                <span class="hint" x-show="moveForm.bar_length > 0"
+                      x-text="packBarNote(moveForm)"></span>
               </div>
             </template>
+
+            <!-- Millimetres, because that is what the cutting list gives. -->
+            <div class="field" x-show="moveForm.bar_length > 0 && moveForm.entry === 'mm'">
+              <label class="label">Length needed in mm *</label>
+              <input class="input num" type="number" min="0" step="any"
+                     x-model.number="moveForm.mm"
+                     @input="moveForm.qty = barsForMm(moveForm, moveForm.mm)"
+                     placeholder="0">
+              <span class="hint"
+                    x-text="num(moveForm.mm) > 0
+                      ? `${mmLabel(moveForm.mm)} \u00f7 ${fmt(moveForm.bar_length)} mm = ${fmt(barsForMm(moveForm, moveForm.mm))} bar(s), leaving ${mmLabel(offcutMm(moveForm, moveForm.mm))} offcut`
+                      : `Whole bars of ${fmt(moveForm.bar_length)} mm come off the rack, so the figure is rounded up.`"></span>
+            </div>
 
             <div class="field" x-show="moveForm.pu_qty > 1 && moveForm.entry === 'pack'">
               <!-- packs in, base units out: see openMove -->
@@ -2114,7 +2138,8 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                       : `Each ${moveForm.pack_unit} holds ${fmt(moveForm.pu_qty)} ${moveForm.unit || 'units'}.`"></span>
             </div>
 
-            <div class="field" x-show="!(moveForm.pu_qty > 1 && moveForm.entry === 'pack')">
+            <div class="field" x-show="!(moveForm.pu_qty > 1 && moveForm.entry === 'pack')
+                                       && !(moveForm.bar_length > 0 && moveForm.entry === 'mm')">
               <label class="label" x-text="`Quantity${moveForm.unit ? ' in ' + moveForm.unit : ''} *`"></label>
               <input class="input num" type="number" min="0" step="any" x-model.number="moveForm.qty" required placeholder="0">
               <template x-if="moveForm.pu_qty > 1 && num(moveForm.qty) > 0">
@@ -2138,7 +2163,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                   : `${fmt(moveForm.on_order - num(moveForm.qty))} of the ${fmt(moveForm.on_order)} on order will still be outstanding \u2014 a part delivery.`"></span>
               </template>
               <template x-if="moveForm.bar_length > 0 && num(moveForm.qty) > 0">
-                <span class="hint" x-text="`${fmt(moveForm.qty)} \u00d7 ${barLabel(moveForm)} bars = ${fmt(barMetres(moveForm, moveForm.qty))} m`"></span>
+                <span class="hint" x-text="`${fmt(moveForm.qty)} bars \u00d7 ${fmt(moveForm.bar_length)} mm = ${fmt(num(moveForm.qty) * moveForm.bar_length)} mm (${fmt(barMetres(moveForm, moveForm.qty))} m)`"></span>
               </template>
             </div>
 
@@ -2274,7 +2299,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                 </span>
               </template>
               <template x-if="xferForm.bar_length > 0 && num(xferForm.qty) > 0">
-                <span class="hint" x-text="`${fmt(xferForm.qty)} \u00d7 ${barLabel(xferForm)} bars = ${fmt(barMetres(xferForm, xferForm.qty))} m`"></span>
+                <span class="hint" x-text="`${fmt(xferForm.qty)} bars \u00d7 ${fmt(xferForm.bar_length)} mm = ${fmt(num(xferForm.qty) * xferForm.bar_length)} mm`"></span>
               </template>
             </div>
 
@@ -2381,7 +2406,113 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
               </div>
             </div>
 
-            <template x-if="!bomForm.id && systems.length">
+            <template x-if="!bomImport">
+              <div class="banner banner-info">
+                <div style="width:100%">
+                  <strong>Build it from a spreadsheet.</strong>
+                  Choose an .xlsx and the lines come straight off it &mdash; either a sheet
+                  with an article column and a quantity column, or a Logikal material
+                  analysis for a job you have already cut.
+                  <div class="row" style="margin-top:.6rem">
+                    <label class="btn btn-sm btn-primary" style="cursor:pointer">
+                      <span x-show="bomImportBusy" class="spinner"></span>
+                      <span>Choose spreadsheet</span>
+                      <input type="file" accept=".xlsx,.xls,.xlsm" style="display:none"
+                             @change="readBomFile($event)">
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <template x-if="bomImport">
+              <div class="banner banner-info">
+                <div style="width:100%">
+                  <div class="row" style="justify-content:space-between;align-items:flex-start;gap:1rem">
+                    <div style="min-width:0">
+                      <strong x-text="bomImport?.fileName"></strong>
+                      <div class="faint" style="font-size:.78rem;margin-top:.15rem"
+                           x-text="(bomImport?.kind === 'mto'
+                             ? 'Logikal material analysis'
+                             : 'Bill of materials sheet') + ' \u00b7 sheet ' + bomImport?.sheet +
+                             ' \u00b7 ' + fmt(bomImport?.rows.length) + ' article(s)' +
+                             (bomImport?.folded ? ' \u00b7 ' + fmt(bomImport?.folded) + ' duplicate row(s) added together' : '')"></div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-ghost"
+                            @click="bomImport = null">Discard</button>
+                  </div>
+
+                  <div class="row" style="margin-top:.7rem;align-items:flex-end;gap:.6rem;flex-wrap:wrap">
+                    <div class="field" style="margin:0;max-width:170px">
+                      <label class="label">Units this file covers *</label>
+                      <input class="input num" type="number" min="0.0001" step="any"
+                             x-model.number="bomImportUnits">
+                    </div>
+                    <button type="button" class="btn btn-sm btn-primary"
+                            @click="applyBomImport()"
+                            :disabled="!(num(bomImportUnits) > 0)"
+                            x-text="`Use these ${fmt(bomImport?.rows.length)} line(s)`"></button>
+                  </div>
+                  <span class="hint" x-text="num(bomImportUnits) > 1
+                    ? `Every quantity is divided by ${fmt(bomImportUnits)} to give what one unit consumes.`
+                    : 'A material analysis covers a whole job. Set this to the number of windows or doors it was cut for, or the template will say one unit needs the lot.'"></span>
+
+                  <template x-if="bomImport?.unknown || bomImport?.zero">
+                    <div class="hint" style="color:var(--warn);margin-top:.4rem"
+                         x-text="[bomImport?.unknown ? fmt(bomImport?.unknown) + ' article(s) are not in the stock list yet' : '',
+                                  bomImport?.zero ? fmt(bomImport?.zero) + ' line(s) have no quantity' : '']
+                                 .filter(Boolean).join(' \u00b7 ') + '. They come in anyway \u2014 correct them below.'"></div>
+                  </template>
+                  <template x-if="bomImport?.clashes">
+                    <div class="hint" style="color:var(--bad);margin-top:.4rem"
+                         x-text="fmt(bomImport?.clashes) + ' line(s) share an article code with a line counted a different way \u2014 one in bars, one in metres or pieces. They are kept apart rather than added together, so check the file and delete whichever is wrong.'"></div>
+                  </template>
+                  <template x-if="bomImport?.packed">
+                    <div class="hint" style="color:var(--warn);margin-top:.4rem"
+                         x-text="fmt(bomImport?.packed) + ' profile line(s) are sold by the pack, so the file\u2019s Quantity column counts packets rather than bars. For those the bar count is worked out from the length required instead, rounded up to whole bars.'"></div>
+                  </template>
+
+                  <div class="table-wrap" style="margin-top:.7rem;max-height:220px;overflow:auto">
+                    <table>
+                      <thead><tr>
+                        <th>Article</th><th>Description</th>
+                        <th class="right">In the file</th><th class="right">Per unit</th><th>Stock</th>
+                      </tr></thead>
+                      <tbody>
+                        <template x-for="r in (bomImport?.rows || [])" :key="r.key || r.art">
+                          <tr>
+                            <td class="mono" style="color:var(--accent)" x-text="r.art"></td>
+                            <td class="truncate" style="max-width:220px">
+                              <span x-text="r.desc"></span>
+                              <span class="pill pill-bad" x-show="r.clash" style="margin-left:.35rem"
+                                    title="This code appears twice in the file, counted two different ways"
+                                    x-text="r.basis === 'bars' ? 'as bars' : 'as ' + (r.unit || 'units')"></span>
+                              <span class="pill pill-warn" x-show="r.packed" style="margin-left:.35rem"
+                                    title="Sold by the pack, so the bar count comes from the length required"
+                                    x-text="fmt(r.pu) + ' per pack'"></span>
+                              <div class="faint" style="font-size:.68rem" x-show="r.fromLength"
+                                   x-text="fmt(r.reqM * 1000) + ' mm needed \u00f7 ' + fmt(r.bar_mm) + ' mm bar'"></div>
+                            </td>
+                            <td class="right num" x-text="fmt(r.qty)"></td>
+                            <td class="right num" style="font-weight:700"
+                                x-text="fmt(bomImportPerUnit(r))"></td>
+                            <td>
+                              <span class="pill"
+                                    :class="inventory.some(i => squashRef(i.article_ref) === squashRef(r.art))
+                                            ? 'pill-good' : 'pill-warn'"
+                                    x-text="inventory.some(i => squashRef(i.article_ref) === squashRef(r.art))
+                                            ? 'in stock list' : 'not found'"></span>
+                            </td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <template x-if="!bomForm.id && systems.length && !bomImport">
               <div class="banner banner-info">
                 <div style="width:100%">
                   <strong>Seed from a system group.</strong>
@@ -3005,7 +3136,12 @@ function parseMto(aoa) {
       else if (t === "pu" && m.pu === undefined) m.pu = i;
       else if (t === "required" && m.req === undefined) m.req = i;
       else if (t === "unit" && m.unit === undefined) m.unit = i;
-      else if (t === "articlenumber" && m.art === undefined) m.art = i;
+      else if (t === "bar" && m.bar === undefined) m.bar = i;
+      /* Logikal heads this column "Article Number" in some exports and plainly
+         "Number" in others, with a second "Number" beside it carrying the
+         finish-coded variant ("247001/.."). Position decides: the first of the
+         two is the bare article code the stock list uses. */
+      else if ((t === "articlenumber" || t === "number") && m.art === undefined) m.art = i;
       else if (t === "description" && m.desc === undefined) m.desc = i;
     });
     return m.art !== undefined ? m : null;
@@ -3047,18 +3183,103 @@ function parseMto(aoa) {
     const qty = num(row[cols.qty]);
     const req = num(cols.req !== undefined ? row[cols.req] : 0);
     const isProfile = /^profile/.test(low(sec));
+    const pu = num(cols.pu !== undefined ? row[cols.pu] : 0);
+    /* Bar length comes through in metres on this sheet ("6.0", "5.0"). */
+    const barM = num(cols.bar !== undefined ? row[cols.bar] : 0);
+
+    /* For a profile the Quantity column is normally the bar count the optimiser
+       settled on, and that is what gets issued. But when the profile is sold by
+       the pack, Quantity counts PACKS — "1" meaning one packet of eight 5 m
+       lengths — and the bars actually consumed have to come from the length
+       required instead, rounded up to whole bars. */
+    let deduct = isProfile ? qty : req;
+    let fromLength = false;
+    if (isProfile && pu > 1 && barM > 0 && req > 0) {
+      deduct = Math.ceil((req - 1e-9) / barM);
+      fromLength = true;
+    }
     lines.push({
       sec: sec || "(no section)",
       art: article,
       desc: norm(cols.desc !== undefined ? row[cols.desc] : "") || article,
       unit: norm(cols.unit !== undefined ? row[cols.unit] : ""),
-      pu: num(cols.pu !== undefined ? row[cols.pu] : 0),
-      qty, req,
-      deduct: isProfile ? qty : req,
+      pu,
+      bar_mm: barM > 0 ? Math.round(barM * 1000) : 0,
+      qty, req, fromLength,
+      deduct,
       basis: isProfile ? "bars" : "required",
     });
   }
   return { project, dated, lines };
+}
+
+/* ---------------------------------------------------------------------------
+   BOM template sheet reader
+   ---------------------------------------------------------------------------
+   A plain spreadsheet of "what one unit consumes": one row per article, with a
+   quantity. Everything about the layout varies between the people who write
+   these, so the header row is found by what it says rather than where it sits,
+   and the sheet may carry any number of junk rows above it.
+
+     Article      Description              Qty per unit    System
+     391440       INNER PROFILE 69         4               ASE 36
+     248890       Locking roller           2
+
+   A Logikal material analysis is read by parseMto instead; readBomFile tries
+   this first because a hand-made BOM sheet is the commoner case.
+--------------------------------------------------------------------------- */
+function parseBomSheet(aoa) {
+  const norm = (v) => String(v ?? "").trim();
+  const tight = (v) => norm(v).toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  const ART  = ["articleref", "articleno", "articlenumber", "article", "articlecode",
+                "art", "code", "itemcode", "partno", "partnumber", "profileref"];
+  const QTY  = ["qtyperunit", "qtyper", "qtyunit", "perunit", "qty", "quantity",
+                "qtyrequired", "required", "usage", "nos", "no"];
+  const DESC = ["description", "materialdescription", "desc", "profiledescription", "name"];
+  const SYS  = ["systemref", "system", "systemreference"];
+
+  const headerCols = (row) => {
+    const m = {};
+    (row || []).forEach((cell, i) => {
+      const t = tight(cell);
+      if (!t) return;
+      if (m.art  === undefined && ART.includes(t))  { m.art = i;  return; }
+      if (m.qty  === undefined && QTY.includes(t))  { m.qty = i;  return; }
+      if (m.desc === undefined && DESC.includes(t)) { m.desc = i; return; }
+      if (m.sys  === undefined && SYS.includes(t))  { m.sys = i;  return; }
+    });
+    /* Both are required: a sheet with an article column and no quantity is a
+       stock list, not a bill of materials, and guessing which column holds the
+       quantity would silently build the wrong template. */
+    return (m.art !== undefined && m.qty !== undefined) ? m : null;
+  };
+
+  let cols = null, name = "", system = "";
+  const lines = [];
+  for (let r = 0; r < aoa.length; r++) {
+    const row = aoa[r] || [];
+    if (!cols) {
+      /* Remember the first substantial line of text above the header — these
+         sheets usually carry the system or the unit's name up there. */
+      const filled = row.map(norm).filter(Boolean);
+      if (filled.length === 1 && filled[0].length > 3 && !name) name = filled[0];
+      cols = headerCols(row);
+      continue;
+    }
+    const art = norm(row[cols.art]);
+    if (!art || tight(art) === "total" || tight(art) === "sum") continue;
+    const qty = num(row[cols.qty]);
+    const sys = cols.sys !== undefined ? norm(row[cols.sys]) : "";
+    if (sys && !system) system = sys;
+    lines.push({
+      art,
+      desc: norm(cols.desc !== undefined ? row[cols.desc] : "") || art,
+      qty,
+      system: sys,
+    });
+  }
+  return { lines, name, system };
 }
 
 /* Sample data — the Schüco articles and villa projects from the prototype. */
@@ -3113,6 +3334,12 @@ document.addEventListener("alpine:init", () => {
     xferOpen: false, xferForm: {}, xferSystemNew: false,
     projectOpen: false, projectForm: {},
     bomOpen: false, bomForm: { lines: [] }, bomSeedSystem: "",
+    /* A spreadsheet read into the BOM dialog, held back until the quantities
+       have been divided by however many units the file covers. */
+    bomImport: null, bomImportBusy: false,
+    /* The divisor is held apart from the parsed file so x-model always has a
+       writable target, even as the preview is being torn down. */
+    bomImportUnits: 1,
     importOpen: false, importText: "", importsDone: {},
     ledgerShown: 300,
     itemSystemNew: false, bomSystemNew: false,
@@ -3230,6 +3457,39 @@ document.addEventListener("alpine:init", () => {
       const mm = this.barLength(item);
       if (!mm) return 0;
       return (num(qty) * mm) / 1000;
+    },
+    /* The cutting list talks in millimetres, so the app does too wherever a
+       length has to be exact: "5,000 mm", not "5 m". */
+    barLenLabel(item) {
+      const mm = this.barLength(item);
+      return mm ? this.fmt(mm) + " mm" : "";
+    },
+    mmLabel(mm) { return this.fmt(Math.round(num(mm))) + " mm"; },
+    /* Millimetres off a cutting list into bars off the rack. Whole bars, always
+       rounded up: you cannot take 1.17 of a bar out of the store, and the
+       offcut stays on the floor as wastage. */
+    barsForMm(item, mm) {
+      const len = this.barLength(item);
+      if (!len || num(mm) <= 0) return 0;
+      return Math.ceil((num(mm) - 1e-6) / len);
+    },
+    /* What is left over once those bars are cut \u2014 Logikal calls it wastage. */
+    offcutMm(item, mm) {
+      const len = this.barLength(item);
+      if (!len || num(mm) <= 0) return 0;
+      return this.barsForMm(item, mm) * len - num(mm);
+    },
+    /* "1 PKT = 8 bars of 5,000 mm = 40,000 mm" \u2014 how a packed profile arrives. */
+    packBarNote(item) {
+      const per = this.puQty(item), len = this.barLength(item);
+      if (per <= 1 && !len) return "";
+      const u = this.packUnit(item);
+      if (per > 1 && len) {
+        return "1 " + u + " = " + this.fmt(per) + " bars of " + this.fmt(len) +
+               " mm = " + this.fmt(per * len) + " mm";
+      }
+      if (per > 1) return "1 " + u + " = " + this.fmt(per) + " " + (item.unit || "units");
+      return "Bars of " + this.fmt(len) + " mm";
     },
     /* The sum people actually look for: on hand plus what is still coming. */
     availableSoon(item) { return this.balanceOf(item) + this.onOrder(item); },
@@ -4166,6 +4426,7 @@ document.addEventListener("alpine:init", () => {
     /* Alpine evaluates markup against the component, so a helper used in a
        template has to live on it \u2014 a module-scope function is invisible there. */
     num,
+    squashRef: squash,
     balanceOf(item) { return num(item.received_qty) - num(item.issued_qty); },
     reorderLevel(item) {
       const own = num(item.min_qty);
@@ -4489,9 +4750,13 @@ document.addEventListener("alpine:init", () => {
         on_order: this.onOrder(item),
         /* Deliveries arrive in packs, production takes pieces, so a packed
            article opens in packs to receive and in base units to issue.
-           An order is placed in packs too — nobody orders 350 screws. */
-        entry: (type === "receive" || type === "order") && this.isPacked(item) ? "pack" : "unit",
-        packs: null,
+           An order is placed in packs too — nobody orders 350 screws.
+           Issuing a profile opens in millimetres, because that is the figure
+           the cutting list hands the storekeeper. */
+        entry: (type === "receive" || type === "order") && this.isPacked(item) ? "pack"
+             : (type === "issue" && this.isBar(item)) ? "mm"
+             : "unit",
+        packs: null, mm: null,
         type, qty: null, project_id: "", note: "",
       };
       this.moveOpen = true;
@@ -4530,6 +4795,10 @@ document.addEventListener("alpine:init", () => {
           item_id: f.item_id, article_ref: f.article_ref, description: f.description,
           system_ref: f.system_ref || "", holding: f.holding || "Stock",
           type: f.type, qty,
+          /* What the cutting list actually asked for, kept beside the bar count
+             so the ledger shows why two bars went out for 5,832 mm. */
+          ...(f.entry === "mm" && num(f.mm) > 0
+              ? { length_mm: num(f.mm), bar_length: num(f.bar_length) } : {}),
           project_id: f.project_id || "", project_code: (project && project.project_code) || "",
           note: f.note || "", at: serverTimestamp(),
           by: this.authUser.uid, by_name: this.displayName,
@@ -4735,6 +5004,7 @@ document.addEventListener("alpine:init", () => {
     /* ---------------- BOM templates ---------------- */
     openBom(b = null) {
       this.bomSeedSystem = "";
+      this.bomImport = null;
       this.bomForm = b
         ? { ...b, lines: (b.lines || []).map((l) => ({ ...l })) }
         : { name: "", system_ref: "", lines: [{ article_ref: "", description: "", qty_per: 1 }] };
@@ -4746,6 +5016,168 @@ document.addEventListener("alpine:init", () => {
       const item = this.inventory.find((i) => key(i.article_ref) === key(line.article_ref));
       if (item && !line.description) line.description = item.description;
     },
+    /* ---- building a template from a spreadsheet -------------------------
+       Two kinds of file land here. A plain BOM sheet states what one unit
+       consumes. A Logikal material analysis states what a whole job consumes,
+       so it has to be divided by the number of units the job covered — which
+       the file never says, and only the person knows. Nothing is written into
+       the editor until that number has been set.
+    -------------------------------------------------------------------- */
+    async readBomFile(event) {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = "";                      // let the same file be re-chosen
+      if (!file) return;
+      this.bomImportBusy = true;
+      try {
+        const XLSX = await loadSheetReader();
+        const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+
+        /* A material analysis is tried first. Its headers would also satisfy the
+           plain reader, but it needs the section-aware rule — bars off the
+           Quantity column for profiles, pieces and metres off Required for
+           everything else — and the plain reader would take Quantity for all of
+           them, turning 136 screws into 2 packets. */
+        let found = null;
+        for (const name of wb.SheetNames) {
+          const aoa = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null });
+          const mto = parseMto(aoa);
+          if (mto.lines.length) {
+            found = { kind: "mto", sheet: name,
+                      lines: mto.lines.map((l) => ({ art: l.art, desc: l.desc,
+                                                     qty: l.deduct, system: "",
+                                                     basis: l.basis, unit: l.unit,
+                                                     pu: l.pu, bar_mm: l.bar_mm,
+                                                     req: l.req, fromLength: l.fromLength })),
+                      name: mto.project, system: "" };
+            break;
+          }
+          const plain = parseBomSheet(aoa);
+          if (plain.lines.length) {
+            found = { kind: "sheet", sheet: name, lines: plain.lines,
+                      name: plain.name, system: plain.system };
+            break;
+          }
+        }
+        if (!found) {
+          this.toast("No bill of materials found in that file. A sheet needs an article " +
+                     "column and a quantity column, or it has to be a Logikal material analysis.", "err");
+          return;
+        }
+
+        /* One article can appear on several rows — two lengths of the same
+           profile, the same screw in two sections — so fold them together.
+           But only rows counted the same way: a material analysis sometimes
+           carries one code under Profiles (bars) and again under Gaskets
+           (metres), and adding 1 bar to 2.9 m would make 3.9 of nothing. */
+        const map = new Map();
+        for (const l of found.lines) {
+          const basis = l.basis || "";
+          const k = squash(l.art) + "|" + basis;
+          if (!map.has(k)) {
+            map.set(k, { key: k, art: l.art, desc: l.desc, qty: 0,
+                         system: l.system || "", basis, unit: l.unit || "",
+                         pu: num(l.pu), bar_mm: num(l.bar_mm), reqM: 0,
+                         fromLength: !!l.fromLength });
+          }
+          const e = map.get(k);
+          e.qty += num(l.qty);
+          e.reqM += num(l.req);
+          if (l.fromLength) e.fromLength = true;
+          if (!e.bar_mm && l.bar_mm) e.bar_mm = num(l.bar_mm);
+          if (!e.desc || e.desc === e.art) e.desc = l.desc;
+          if (!e.system && l.system) e.system = l.system;
+        }
+        const rows = [...map.values()];
+
+        /* The same code counted two ways is nearly always a fault in the file,
+           so say so rather than quietly picking one of them. */
+        const byArt = new Map();
+        for (const r of rows) byArt.set(squash(r.art), (byArt.get(squash(r.art)) || 0) + 1);
+        for (const r of rows) r.clash = byArt.get(squash(r.art)) > 1;
+
+        /* A profile line is counted in whole bars off the Quantity column. When
+           Logikal also shows a packing unit on it, that Quantity is a number of
+           PACKS, not bars, and only the storekeeper knows whether the yard
+           breaks the pack. Left as the file states it and flagged, rather than
+           multiplied behind your back. */
+        for (const r of rows) r.packed = r.basis === "bars" && num(r.pu) > 1;
+
+        /* Guess the system: from a column in the file, from the articles
+           themselves, or from the file name, in that order. */
+        let system = found.system;
+        if (!system) {
+          const tally = new Map();
+          for (const r of rows) {
+            const hit = this.inventory.find((i) => squash(i.article_ref) === squash(r.art));
+            if (hit && hit.system_ref) tally.set(hit.system_ref, (tally.get(hit.system_ref) || 0) + 1);
+          }
+          const best = [...tally.entries()].sort((a, b) => b[1] - a[1])[0];
+          if (best && best[1] >= 2) system = best[0];
+        }
+        if (!system) {
+          const fname = String(file.name).toLowerCase().replace(/[^a-z0-9]/g, "");
+          for (const sy of this.systemOptions) {
+            const t = String(sy).toLowerCase().replace(/[^a-z0-9]/g, "");
+            if (t && fname.includes(t) && t.length > String(system).length) system = sy;
+          }
+        }
+
+        this.bomImportUnits = 1;
+        this.bomImport = {
+          fileName: file.name, sheet: found.sheet, kind: found.kind,
+          rows, name: found.name || "", system,
+          unknown: rows.filter((r) =>
+            !this.inventory.some((i) => squash(i.article_ref) === squash(r.art))).length,
+          zero: rows.filter((r) => num(r.qty) <= 0).length,
+          clashes: rows.filter((r) => r.clash).length,
+          packed: rows.filter((r) => r.packed).length,
+          folded: found.lines.length - rows.length,
+        };
+      } catch (e) {
+        this.toast("Could not read that file: " + e.message, "err");
+      } finally { this.bomImportBusy = false; }
+    },
+
+    /* What one unit consumes, at the divisor currently set. */
+    bomImportPerUnit(row) {
+      const u = num(this.bomImportUnits);
+      const per = num(row.qty) / (u > 0 ? u : 1);
+      return Math.round(per * 10000) / 10000;
+    },
+
+    applyBomImport() {
+      const imp = this.bomImport;
+      if (!imp) return;
+      const lines = imp.rows.map((r) => ({
+        article_ref: r.art,
+        description: r.desc || "",
+        qty_per: this.bomImportPerUnit(r),
+      }));
+      if (!lines.length) return;
+      this.bomForm.lines = lines;
+      if (!this.bomForm.system_ref && imp.system) this.bomForm.system_ref = imp.system;
+      if (!this.bomForm.name) {
+        /* A material analysis often has nothing above its header but a date,
+           which makes a poor template name. */
+        /* The text above a material analysis's header is sometimes the project,
+           sometimes just a date, and sometimes the empty label "Project name:".
+           Only a real name is worth keeping. */
+        const nm = String(imp.name || "").trim();
+        const useless = !nm ||
+          /^\s*\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\s*$/.test(nm) ||
+          /:$/.test(nm) ||
+          /^(project|position|customer|order)\b/i.test(nm);
+        this.bomForm.name = (!useless && nm) ||
+                            imp.fileName.replace(/\.[^.]+$/, "").replace(/[_]+/g, " ").trim() ||
+                            imp.system;
+      }
+      const n = num(this.bomImportUnits);
+      this.toast(lines.length + " line(s) read from " + imp.fileName +
+                 (n > 1 ? " and divided by " + this.fmt(n) + " units" : "") +
+                 " \u2014 check the quantities before saving.", "ok");
+      this.bomImport = null;
+    },
+
     seedBomFromSystem() {
       const sys = this.bomSeedSystem;
       if (!sys) return;

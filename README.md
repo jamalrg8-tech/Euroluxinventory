@@ -184,6 +184,33 @@ with it: 63 bars of 6 m reads as 378 m under the balance. The field accepts 6,
 600 or 6000 and normalises all three, because the workbook writes it all three
 ways.
 
+### Millimetres, bars and packs
+
+A profile is bought by the pack, stocked by the bar and consumed by the
+millimetre, and all three have to line up. An article carries `pu_qty` (bars to
+a pack), `bar_length` (mm per bar) and a base unit of `BAR`, which reads back as
+`1 PKT = 8 bars of 5,000 mm = 40,000 mm`.
+
+The movement dialog therefore offers three ways in, and picks the one that fits
+what you are doing: **packs** to receive (a delivery arrives as packets),
+**mm** to issue (the cutting list is in millimetres), and the base unit at any
+time. Millimetres convert with `barsForMm`, which rounds **up** — you cannot
+take 1.17 of a bar off the rack — and the dialog states the offcut, which
+matches Logikal's own wastage figure:
+
+```
+5,832 mm ÷ 5,000 mm = 2 bar(s), leaving 4,168 mm offcut
+```
+
+A movement entered that way stores `length_mm` beside `qty`, so the ledger shows
+why two bars went out for 5,832 mm.
+
+The same distinction governs the BOM import. For a profile, `parseMto` normally
+takes the bar count straight off the Quantity column, which is what the cutting
+optimiser settled on. When the profile is sold by the pack (`PU` > 1) that
+column counts **packets** instead, so the bars consumed are derived from
+`Required ÷ Bar`, rounded up, and the preview says so.
+
 ### On order, and part deliveries
 
 Each article carries `on_order`: what has been ordered from the supplier and is
@@ -198,6 +225,35 @@ outstanding.
   same to every line on it.
 - **Reports › On order** lists everything outstanding, worst first, with what
   the line will hold once it lands. **Export CSV** gives it as a spreadsheet.
+
+### Building a BOM template from a spreadsheet
+
+**New BOM template › Choose spreadsheet** reads an .xlsx and fills the line
+editor from it. Two shapes are accepted, and the dialog names the one it found:
+
+- A **plain BOM sheet** — `parseBomSheet` locates the header row by its labels
+  rather than its position, so any number of title or note rows may sit above
+  it. It requires an article column (`Article ref.`, `Article Number`, `Code`…)
+  **and** a quantity column (`Qty per unit`, `Quantity`, `Required`…); an
+  article column alone is a stock list, not a bill of materials, and is
+  refused rather than guessed at. `Description` and `System ref.` are used if
+  present.
+- A **Logikal material analysis** — read by the existing `parseMto`, which is
+  tried **first**. Its headers would also satisfy the plain reader, but it
+  needs the section-aware rule (bars off `Quantity` for profiles, pieces and
+  metres off `Required` for everything else); the plain reader would take
+  `Quantity` throughout and turn 136 screws into 2 packets.
+
+`bomImportUnits` divides every quantity, because a material analysis covers a
+whole job and only the person knows how many units that was. It is held as its
+own state field rather than inside `bomImport` so `x-model` always has a
+writable target while the preview is being torn down. Nothing reaches the line
+editor until **Use these lines** is pressed.
+
+On the way in, repeated articles are summed (and the fold count reported), the
+system is inferred from a column, then from the articles' own `system_ref`,
+then from the file name, and articles missing from the stock list are flagged
+but still imported.
 
 ### Moving stock between systems
 
