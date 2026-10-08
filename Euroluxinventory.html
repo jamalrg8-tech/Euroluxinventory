@@ -469,7 +469,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
             posted on one device appears on every other device within a second.
           </p>
         </div>
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.22, 2026年10月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.23, 2026年10月 - アイカ 🤌🏽</p>
       </div>
     </div>
   </template>
@@ -943,6 +943,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                 <option value="order">Orders placed</option>
                 <option value="adjust">Adjustments</option>
               </select>
+              <button class="btn btn-sm" @click="exportLedger()" :disabled="!filteredMovements.length">Export CSV</button>
             </div>
           </div>
 
@@ -2183,7 +2184,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
           </div>
         </div>
 
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.22, 2026年10月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.23, 2026年10月 - アイカ 🤌🏽</p>
       </div><!-- /view -->
     </main>
   </div>
@@ -4048,6 +4049,22 @@ document.addEventListener("alpine:init", () => {
        makes the page crawl on a phone, so show a page at a time and let the
        search box and the type filter do the narrowing. */
     get visibleMovements() { return this.filteredMovements.slice(0, this.ledgerShown); },
+    /* Every row the type filter and search let through, not only the page shown. */
+    exportLedger() {
+      const iso = (ts) => {
+        if (!ts) return "";
+        const d = ts.toDate ? ts.toDate() : new Date(ts);
+        return Number.isNaN(d.getTime()) ? "" : d.toISOString().replace("T", " ").slice(0, 19);
+      };
+      const rows = [["when_utc", "type", "direction", "article_ref", "description", "system_ref", "holding",
+                     "qty", "project_code", "note", "by"]];
+      for (const m of this.filteredMovements) {
+        rows.push([iso(m.at), m.type || "", m.direction || "", m.article_ref || "", m.description || "",
+                   m.system_ref || "", m.holding || "Stock", num(m.qty), m.project_code || "", m.note || "",
+                   m.by_name || ""]);
+      }
+      downloadCsv(rows, "eurolux-ledger-" + new Date().toISOString().slice(0, 10) + ".csv");
+    },
 
     /* The dropdown's options. Always includes whatever the record already
        carries, so editing an old BOM cannot silently blank its system. */

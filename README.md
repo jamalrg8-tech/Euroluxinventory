@@ -487,7 +487,7 @@ from inside the app, which is what makes the ledger worth trusting. If you need
 to clear the ledger too, delete the `movements` collection from the Firebase
 console, which runs with admin rights and is not bound by the rules.
 
-**Reloading everything from the master workbook** (as on 8 October 2026):
+**Reloading everything from the master workbook** (as on 8 October 2026). Export the Movement Ledger first (Movement Ledger → Export CSV) if you want a copy of what is about to go:
 
 1. Firebase console → Firestore Database → `movements` → ⋮ → **Delete
    collection**. Without this the old ledger stays beside the new one and every
