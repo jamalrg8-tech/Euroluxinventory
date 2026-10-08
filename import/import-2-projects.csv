@@ -1,14 +1,14 @@
-project_code,client,status,notes
-1348 - RASHA,,active,From master stock list
-1349 - MEADOWS 01,,active,From master stock list
-1350 - MEADOWS-09,,active,From master stock list
-1361 - C35,,active,From master stock list
-1361 - C35 (CURVE),,active,From master stock list
-1369-Esmeralda,,active,From master stock list
-1369-Esmeralda (balance doors),,active,From master stock list
-1372 - WILDFLOWER K80,,active,From master stock list
-1380 - APARTMENT 606,,active,From master stock list
-1383 - APARTMENT 603,,active,From master stock list
-1392 - MARSA AL ARAB,,active,From master stock list
-1393 - SAVANNAH,,active,From master stock list
-1397 - FLAMETREE,,active,From master stock list
+project_code,client,status,notes,holding
+1348 - RASHA,,active,From master stock list,
+1349 - MEADOWS 01,,active,From master stock list,
+1350 - MEADOWS-09,,active,From master stock list,MWADOWS-09
+1361 - C35,,active,From master stock list,1361
+1361 - C35 (CURVE),,active,From master stock list,SHORTAGE (C35) - SIDE HUNG WINDOWS
+1369-Esmeralda,,active,From master stock list,
+1369-Esmeralda (balance doors),,active,From master stock list,"Villa 80 - ST3, Esmeralda – A"
+1372 - WILDFLOWER K80,,active,From master stock list,
+1380 - APARTMENT 606,,active,From master stock list,
+1383 - APARTMENT 603,,active,From master stock list,"Apartment 603, Kempinski Residences"
+1392 - MARSA AL ARAB,,active,From master stock list,Marsa Al Arab
+1393 - SAVANNAH,,active,From master stock list,"Villa 24, Street 4, Savannah A"
+1397 - FLAMETREE,,active,From master stock list,"Villa D58, Flame Tree Ridge A"

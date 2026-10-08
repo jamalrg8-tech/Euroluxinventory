@@ -68,4 +68,5 @@ export const collections = {
   boms: "boms",
   users: "users",
   settings: "settings",
+  substitutes: "substitutes",
 };
