@@ -321,9 +321,12 @@ back.
   stock holds for the same article and system now (**new line** if it holds
   none).
 - Each card shows the villa's job status from **Villa Projects** — *active*,
-  *on hold* or *complete* — or *no matching job* if no job has the same name.
-  Names are matched ignoring punctuation and spacing, so "Villa D58, Flame Tree"
-  matches "Villa D58 - Flame Tree".
+  *on hold* or *complete* — or *no matching job* if no job matches.
+  The job is found by name: the job number is dropped and the rest is looked
+  for inside the villa's holding name, ignoring capitals, spaces and
+  punctuation — so "Villa 24, Street 4, Savannah A" matches "1393 - SAVANNAH"
+  and "Marsa Al Arab" matches "1392 - MARSA AL ARAB". Job names shorter than
+  four letters ("C35") only match exactly, and the longest match wins.
 - Pick one villa or **All villas**, tick **Completed villas only** to see just
   the finished jobs, and use the search box at the top to find an article.
 - **Export CSV** downloads the report as shown.
@@ -660,5 +663,5 @@ is required to start, and projects are never paused for inactivity.
 | Install prompt missing | PWA install requires HTTPS — GitHub Pages provides it; `file://` does not. |
 | BOM Wizard says "short" but Master Stock shows plenty | Master Stock is filtered to one system. Switch it to **ALL SYSTEMS**: the stock may be under another system (the wizard will use it after asking you) or held for a villa (return it with **Villa Leftovers** or **Move**). |
 | A villa line in BOM bookings went negative before this version | Older versions issued from the first line with a matching article, which could be a villa line. Fix it with **Move** from main stock, and cancel any matching **On order** quantity. |
-| Villa Leftovers shows "no matching job" | The holding name and the job name in Villa Projects differ by more than punctuation. Rename one so they match, or leave it — the report and moves still work. |
+| Villa Leftovers shows "no matching job" | The villa's holding name does not contain the job's name (after its number). Rename the job to include the villa's name, or leave it — the report and moves still work. |
 | Offline work disappeared | Site data was cleared, or the app was used in a private window. Install the PWA properly and avoid clearing site data. |

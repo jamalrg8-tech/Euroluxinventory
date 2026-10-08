@@ -461,7 +461,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
             posted on one device appears on every other device within a second.
           </p>
         </div>
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.20, 2026年9月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.21, 2026年10月 - アイカ 🤌🏽</p>
       </div>
     </div>
   </template>
@@ -608,7 +608,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
               <div class="kpi-value" style="color:var(--warn)" x-text="fmt(totals.onOrder)"></div>
               <div class="kpi-foot"
                    x-text="`ordered, not yet delivered \u00b7 ${fmt(onOrderItems.length)} article(s)`"></div>
-              <div class="kpi-hint" x-show="onOrderItems.length">SEE THE LIST \u2192</div>
+              <div class="kpi-hint" x-show="onOrderItems.length">SEE THE LIST →</div>
             </div>
           </div>
 
@@ -2023,7 +2023,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
           </div>
         </div>
 
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.20, 2026年9月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.21, 2026年10月 - アイカ 🤌🏽</p>
       </div><!-- /view -->
     </main>
   </div>
@@ -5114,14 +5114,28 @@ document.addEventListener("alpine:init", () => {
        goes on to the main-stock line, with a matched pair of ledger entries —
        so the business's received/issued totals are left alone.
     -------------------------------------------------------------------- */
-    /* The job a villa holding belongs to, if its name matches a project. */
+    /* The job a villa holding belongs to. Holdings are named after the villa
+       ("Villa 24, Street 4, Savannah A") and jobs after the job number and
+       name ("1393 - SAVANNAH"), so the job number is dropped and the rest is
+       looked for inside the holding name, ignoring case, spaces and
+       punctuation. Names shorter than four letters ("C35") are only matched
+       exactly, and the longest match wins. */
     villaProject(holding) {
       const norm = (v) => String(v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
       const h = norm(holding);
       if (!h) return null;
-      return this.projects.find((p) => norm(p.project_code) === h) ||
-             this.projects.find((p) => { const c = norm(p.project_code); return c && (c.startsWith(h) || h.startsWith(c)); }) ||
-             null;
+      let best = null, bestLen = 0;
+      for (const p of this.projects) {
+        const full = norm(p.project_code);
+        const core = norm(String(p.project_code ?? "").replace(/^\s*\d+\s*[-–—]\s*/, ""));
+        let len = 0;
+        if (full && full === h) len = 1e6;
+        else if (core && core === h) len = 1e5;
+        else if (core.length >= 4 && h.includes(core)) len = core.length;
+        else if (h.length >= 4 && core.includes(h)) len = h.length;
+        if (len > bestLen) { best = p; bestLen = len; }
+      }
+      return best;
     },
     villaStatus(holding) { const p = this.villaProject(holding); return p ? (p.status || "active") : ""; },
 
