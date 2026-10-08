@@ -304,7 +304,57 @@ when you switch to **All holdings**, and on every ledger row as **From**.
 
 Booking and the MTO import both ask which holding to draw from, rather than
 guessing, because holding names ("Villa 80 - ST3, Esmeralda") and job codes
-("1369-Esmeralda") are not the same strings.
+("1369-Esmeralda") are not the same strings. The BOM Wizard always draws from
+main stock.
+
+### Returning villa leftovers to main stock
+
+Material bought for a villa is often not all used. Whatever is left on a villa
+line — received minus issued, above zero — stays reserved for that villa until
+you return it. **Villa Leftovers**, in the sidebar, lists it all and moves it
+back.
+
+**The report**
+
+- One card per villa, with every article that still has a balance: system,
+  article, description, unit, received, issued, **Left over**, and what main
+  stock holds for the same article and system now (**new line** if it holds
+  none).
+- Each card shows the villa's job status from **Villa Projects** — *active*,
+  *on hold* or *complete* — or *no matching job* if no job has the same name.
+  Names are matched ignoring punctuation and spacing, so "Villa D58, Flame Tree"
+  matches "Villa D58 - Flame Tree".
+- Pick one villa or **All villas**, tick **Completed villas only** to see just
+  the finished jobs, and use the search box at the top to find an article.
+- **Export CSV** downloads the report as shown.
+- Villa lines that are negative (issued more than received) have nothing to
+  return and are not listed; a note at the bottom counts them. Find them under
+  **Reports › Negative**.
+
+**Moving leftovers back**
+
+1. When the villa is finished, mark its job **complete** in Villa Projects.
+2. In Villa Leftovers, tick the lines to return, or the box beside the villa's
+   name to tick all of them.
+3. Press **Move *n* selected to main stock**, or **Move all to main stock** on
+   the villa's card.
+4. Confirm. If any villa in the selection is not marked complete, the question
+   warns you — only continue if you are sure that material will not be needed.
+
+Each line's whole leftover goes to main stock under **the same article and
+system**. If main stock has never held that article under that system, the line
+is created, carrying the unit, pack size and bar length across.
+
+It is booked exactly like **Move**: a `transfer`, not a delivery or an issue.
+The quantity comes off the villa line's received total and goes on to the main
+stock line's, so the yard's overall received, issued and balance totals do not
+change. The ledger gets a matched pair of entries — *"Villa leftover returned to
+main stock"* on the villa side and *"Villa leftover returned from Villa …"* on
+the main-stock side. To undo a return, use **Move** on the main-stock line to
+send the quantity back to the villa.
+
+To return only part of a leftover, use **Move** on that villa line in Master
+Stock instead.
 
 ---
 
@@ -419,6 +469,42 @@ group" pulls in every article carrying a system reference at 1 per unit so you
 correct numbers rather than typing the bundle. Pick the template, the number of
 units and a villa project, and it shows required vs. on-hand vs. shortfall per
 line before **Batch book package bundle** posts the lot.
+
+Where the bundle is drawn from:
+
+1. **Main stock only.** The wizard looks at the *Stock* holding and nothing
+   else. Material held for another villa is never touched, because it is
+   reserved for that job.
+2. **The template's own system first.** For each article it uses main stock
+   filed under the template's system (for example *ADS / AWS 65*). This is the
+   **On hand (this system)** column.
+3. **Then main stock under another system.** If that is not enough, it uses
+   the same article from main stock filed under a different system. Those lines
+   are marked **other system**, the **Other systems** column shows how much is
+   taken, and a blue notice above the table lists them.
+4. **Then the shortfall.** Anything still not covered is shown in **Short by**.
+   Booking anyway posts the shortfall against the template-system line in main
+   stock, which goes negative until the material is bought and received.
+
+When you press **Batch book package bundle** and any line uses another system's
+stock, you are asked first — *"⚠ Different system … Issue them from that
+stock?"* — with each article, the quantity and the system it would come from.
+**Cancel** stops the booking and posts nothing; **OK** goes on to the usual
+summary. In the Movement Ledger, an issue taken from another system's stock
+says so in its note, e.g. *"BOM: AWS 65 Window × 10 (from ASE 55 Lift & Slide
+stock, BOM system ADS / AWS 65)"*.
+
+| Status | Meaning |
+|---|---|
+| available | Covered by main stock under the template's system. |
+| other system | Covered, but partly or wholly from main stock under another system — you will be asked to confirm. |
+| short | Main stock, all systems included, cannot cover it. |
+| only held for other jobs | The article exists only in villa holdings, so it is skipped. Move stock into main stock first. |
+| not in stock list | The article is not in the stock list at all, so it is skipped. |
+
+**Villa Leftovers** — material still held for a villa after its issues, ready
+to go back to main stock once the job is finished. See
+[Returning villa leftovers to main stock](#returning-villa-leftovers-to-main-stock).
 
 **MTO Import** reads the *Material analysis* spreadsheet Logikal exports for a
 job and books the whole thing off stock in one posting. It finds the Profiles,
@@ -572,4 +658,7 @@ is required to start, and projects are never paused for inactivity.
 | Changes don't appear after a deploy | Bump `CACHE_VERSION` in `sw.js`, then hard-reload. |
 | Stuck on "Starting…" | `cdn.jsdelivr.net` or `gstatic.com` is blocked by the network. |
 | Install prompt missing | PWA install requires HTTPS — GitHub Pages provides it; `file://` does not. |
+| BOM Wizard says "short" but Master Stock shows plenty | Master Stock is filtered to one system. Switch it to **ALL SYSTEMS**: the stock may be under another system (the wizard will use it after asking you) or held for a villa (return it with **Villa Leftovers** or **Move**). |
+| A villa line in BOM bookings went negative before this version | Older versions issued from the first line with a matching article, which could be a villa line. Fix it with **Move** from main stock, and cancel any matching **On order** quantity. |
+| Villa Leftovers shows "no matching job" | The holding name and the job name in Villa Projects differ by more than punctuation. Rename one so they match, or leave it — the report and moves still work. |
 | Offline work disappeared | Site data was cleared, or the app was used in a private window. Install the PWA properly and avoid clearing site data. |

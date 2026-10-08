@@ -1059,7 +1059,18 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                 <div class="banner banner-warn">
                   <div>
                     <strong>Insufficient stock for this bundle.</strong><br>
-                    <span x-text="`${wizardLines.filter(l=>l.short>0||!l.known).length} of ${wizardLines.length} lines cannot be covered by the current warehouse balance. Booking anyway drives those articles negative — the ledger stays correct, but the shortfall has to be purchased.`"></span>
+                    <span x-text="`${wizardLines.filter(l=>l.short>0||!l.known).length} of ${wizardLines.length} lines cannot be covered by main stock (all systems included). Booking anyway drives those articles negative — the ledger stays correct, but the shortfall has to be purchased.`"></span>
+                  </div>
+                </div>
+              </template>
+
+              <template x-if="wizardOtherSystem.length">
+                <div class="banner banner-info">
+                  <div>
+                    <strong>Some lines come from a different system.</strong><br>
+                    <span x-text="`${wizardOtherSystem.length} line(s) are not fully in main stock under ${selectedBom?.system_ref || 'this system'}, but are in main stock under another system: ` +
+                      wizardOtherSystem.map(l => `${l.article_ref} (${fmt(l.other_qty)} from ${l.other_systems.join(', ')})`).join('; ') +
+                      `. You will be asked to confirm before they are booked.`"></span>
                   </div>
                 </div>
               </template>
@@ -1070,7 +1081,8 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                     <thead><tr>
                       <th>Article</th><th>Material Description</th>
                       <th class="right">Per unit</th><th class="right">Required count</th>
-                      <th class="right">On hand</th><th class="right">Short by</th><th>Status</th>
+                      <th class="right">On hand (this system)</th><th class="right">Other systems</th>
+                      <th class="right">Short by</th><th>Status</th>
                     </tr></thead>
                     <tbody>
                       <template x-for="l in wizardLines" :key="l.article_ref">
@@ -1080,11 +1092,16 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                           <td class="right num muted" x-text="fmt(l.qty_per)"></td>
                           <td class="right num" style="font-weight:700" x-text="fmt(l.required)"></td>
                           <td class="right num" x-text="l.known ? fmt(l.on_hand) : '—'"></td>
+                          <td class="right num" :title="l.other_systems.join(', ')"
+                              :style="l.other_qty>0 ? 'color:var(--accent);font-weight:700' : 'color:var(--faint)'"
+                              x-text="l.known ? (l.other_qty>0 ? fmt(l.other_qty) + ' used' : fmt(l.other_on_hand)) : '—'"></td>
                           <td class="right num" :style="l.short>0 ? 'color:var(--bad);font-weight:700' : 'color:var(--faint)'"
                               x-text="fmt(l.short)"></td>
                           <td>
-                            <span class="pill" :class="!l.known ? 'pill-bad' : (l.short>0 ? 'pill-warn' : 'pill-good')"
-                                  x-text="!l.known ? 'not in stock list' : (l.short>0 ? 'short' : 'available')"></span>
+                            <span class="pill"
+                                  :class="!l.known ? 'pill-bad' : (l.short>0 ? 'pill-warn' : (l.other_qty>0 ? 'pill-info' : 'pill-good'))"
+                                  x-text="!l.known ? (l.held_elsewhere ? 'only held for other jobs' : 'not in stock list')
+                                         : (l.short>0 ? 'short' : (l.other_qty>0 ? 'other system' : 'available'))"></span>
                           </td>
                         </tr>
                       </template>
@@ -1838,6 +1855,97 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                 </div>
               </template>
             </div>
+          </template>
+        </div>
+
+        <!-- ============ VILLA LEFTOVERS ============ -->
+        <div id="view-leftovers" x-show="currentTab==='leftovers'" class="stack">
+          <div class="view-head">
+            <div>
+              <h2 class="view-title">Villa Leftovers</h2>
+              <p class="view-sub">Material still held for a villa after issuing. Once a villa is finished, return what is left to main stock.</p>
+            </div>
+            <div class="actions">
+              <select class="select" style="width:auto;min-width:200px" x-model="leftoverVilla" @change="leftoverSel={}">
+                <option value="ALL">All villas</option>
+                <template x-for="h in leftoverVillas" :key="h">
+                  <option :value="h" x-text="h"></option>
+                </template>
+              </select>
+              <label class="row" style="gap:.4rem;font-size:.85rem;white-space:nowrap">
+                <input type="checkbox" x-model="leftoverDoneOnly" @change="leftoverSel={}">
+                Completed villas only
+              </label>
+              <button class="btn btn-sm" @click="exportLeftovers()" :disabled="!leftoverRows.length">Export CSV</button>
+              <button class="btn btn-sm btn-primary" @click="returnLeftovers(leftoverSelected)"
+                      :disabled="!leftoverSelected.length || saving">
+                <span x-show="saving" class="spinner"></span>
+                <span x-text="`Move ${fmt(leftoverSelected.length)} selected to main stock`"></span>
+              </button>
+            </div>
+          </div>
+
+          <template x-if="!leftoverRows.length">
+            <div class="card empty">
+              <div class="empty-title">No leftovers</div>
+              <div x-text="searchQuery ? 'Nothing matches your search here.'
+                : (leftoverDoneOnly ? 'No completed villa has material left over.' : 'No villa has material left over.')"></div>
+            </div>
+          </template>
+
+          <template x-for="g in leftoverGroups" :key="g.holding">
+            <div class="card">
+              <div class="card-pad" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;border-bottom:1px solid var(--line)">
+                <div class="row" style="gap:.6rem">
+                  <input type="checkbox" :checked="g.rows.every(r => leftoverSel[r.id])"
+                         @change="g.rows.forEach(r => leftoverSel[r.id] = $event.target.checked)"
+                         :aria-label="'Select all leftovers for ' + g.holding">
+                  <h3 style="font-size:.95rem" x-text="g.holding"></h3>
+                  <span class="pill" :class="g.status==='complete' ? 'pill-good' : (g.status ? 'pill-info' : 'pill-mute')"
+                        x-text="g.status || 'no matching job'"></span>
+                </div>
+                <div class="row">
+                  <span class="hint" x-text="`${fmt(g.rows.length)} article(s) · ${fmt(g.units)} units left`"></span>
+                  <button class="btn btn-sm" @click="returnLeftovers(g.rows)" :disabled="saving">
+                    Move all to main stock
+                  </button>
+                </div>
+              </div>
+              <div class="table-wrap" style="border:0;border-radius:0">
+                <table>
+                  <thead><tr>
+                    <th style="width:2rem"></th>
+                    <th>System</th><th>Article</th><th>Description</th><th>Unit</th>
+                    <th class="right">Received</th><th class="right">Issued</th>
+                    <th class="right">Left over</th><th class="right">Main stock now</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="i in g.rows" :key="i.id">
+                      <tr>
+                        <td><input type="checkbox" x-model="leftoverSel[i.id]" :aria-label="'Select ' + i.article_ref"></td>
+                        <td class="muted truncate" style="max-width:190px" x-text="i.system_ref || '—'"></td>
+                        <td class="mono" style="color:var(--accent);font-weight:700" x-text="i.article_ref"></td>
+                        <td x-text="i.description"></td>
+                        <td class="faint" x-text="i.unit || '—'"></td>
+                        <td class="right num muted" x-text="fmt(num(i.received_qty))"></td>
+                        <td class="right num muted" x-text="fmt(num(i.issued_qty))"></td>
+                        <td class="right num" style="font-weight:700">
+                          <div x-text="fmt(balanceOf(i))"></div>
+                          <div class="faint" style="font-size:.7rem" x-show="isPacked(i)"
+                               x-text="packNote(i, balanceOf(i))"></div>
+                        </td>
+                        <td class="right num muted"
+                            x-text="mainStockLine(i) ? fmt(balanceOf(mainStockLine(i))) : 'new line'"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="leftoverNegative.length">
+            <p class="hint" x-text="`${fmt(leftoverNegative.length)} villa line(s) are negative (issued more than received) and are not shown here — see Reports → Negative.`"></p>
           </template>
         </div>
 
@@ -3332,6 +3440,7 @@ document.addEventListener("alpine:init", () => {
     itemOpen: false, itemForm: {},
     moveOpen: false, moveForm: {},
     xferOpen: false, xferForm: {}, xferSystemNew: false,
+    leftoverVilla: "ALL", leftoverDoneOnly: false, leftoverSel: {},
     projectOpen: false, projectForm: {},
     bomOpen: false, bomForm: { lines: [] }, bomSeedSystem: "",
     /* A spreadsheet read into the BOM dialog, held back until the quantities
@@ -3374,6 +3483,8 @@ document.addEventListener("alpine:init", () => {
         icon: '<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6"/><path d="M9.5 14.5L12 17l2.5-2.5"/>' },
       { id: "reports", label: "Reports",
         icon: '<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/>' },
+      { id: "leftovers", label: "Villa Leftovers",
+        icon: '<path d="M3 9l9-5 9 5v9l-9 5-9-5z"/><path d="M15 13H9"/><path d="M11 11l-2 2 2 2"/>' },
       { id: "settings", label: "Settings",
         icon: '<circle cx="12" cy="12" r="3"/><path d="M20 12a8 8 0 00-.14-1.5l2-1.5-2-3.46-2.35.9a8 8 0 00-2.6-1.5L14.5 2h-4l-.4 2.94a8 8 0 00-2.6 1.5l-2.36-.9-2 3.46 2 1.5a8 8 0 000 3l-2 1.5 2 3.46 2.35-.9a8 8 0 002.6 1.5l.41 2.94h4l.4-2.94a8 8 0 002.6-1.5l2.36.9 2-3.46-2-1.5c.1-.49.14-1 .14-1.5z"/>' },
     ],
@@ -4209,27 +4320,68 @@ document.addEventListener("alpine:init", () => {
       return this.online ? "pill-good" : "pill-mute";
     },
     get selectedBom() { return this.boms.find((b) => b.id === this.wizard.bomId) || null; },
+    /* A bundle is always drawn from MAIN STOCK ("Stock" holding). Material
+       held for another villa is not available to this job, so it is never
+       used. Within main stock the BOM's own system is used first; if that is
+       not enough, main stock filed under a DIFFERENT system is used next and
+       the line is flagged, so the user is asked before it is booked. Whatever
+       still cannot be covered is the shortfall, and it is posted against the
+       BOM-system line (so that line goes negative, not some other job's). */
     get wizardLines() {
       const bom = this.selectedBom;
       if (!bom) return [];
       const units = Math.max(0, num(this.wizard.units));
+      const bomSys = squash(bom.system_ref);
       return (bom.lines || []).map((l) => {
-        const item = this.inventory.find((i) => key(i.article_ref) === key(l.article_ref));
         const required = num(l.qty_per) * units;
-        const on_hand = item ? this.balanceOf(item) : 0;
+        const all = this.inventory.filter((i) => key(i.article_ref) === key(l.article_ref));
+        const stock = all.filter((i) => key(this.holdingOf(i)) === "stock");
+        // No BOM system set: every main-stock line counts as a match.
+        const isSame = (i) => !bomSys || squash(i.system_ref) === bomSys;
+        const byBal = (a, b) => this.balanceOf(b) - this.balanceOf(a);
+        const same = stock.filter(isSame).sort(byBal);
+        const other = stock.filter((i) => !isSame(i)).sort(byBal);
+
+        const sources = [];
+        let remaining = required;
+        for (const i of [...same, ...other]) {
+          if (remaining <= 0) break;
+          const take = Math.min(remaining, Math.max(0, this.balanceOf(i)));
+          if (take <= 0) continue;
+          sources.push({ item_id: i.id, system_ref: i.system_ref || "", qty: take, other: !isSame(i) });
+          remaining -= take;
+        }
+        // Where the uncovered part is booked: the BOM-system line if there is one.
+        const primary = same[0] || other[0] || null;
+        if (remaining > 0 && primary) {
+          const s = sources.find((x) => x.item_id === primary.id);
+          if (s) s.qty += remaining;
+          else sources.push({ item_id: primary.id, system_ref: primary.system_ref || "",
+                              qty: remaining, other: !isSame(primary) });
+        }
+
+        const fromOther = sources.filter((s) => s.other);
+        const ref = primary || all[0] || null;
         return {
           article_ref: l.article_ref,
-          description: (item && item.description) || l.description || "—",
-          system_ref: (item && item.system_ref) || bom.system_ref || "",
+          description: (ref && ref.description) || l.description || "—",
+          system_ref: (primary && primary.system_ref) || bom.system_ref || "",
           qty_per: num(l.qty_per),
-          required, on_hand,
-          short: Math.max(0, required - on_hand),
-          known: !!item,
-          item_id: item ? item.id : null,
+          required,
+          on_hand: same.reduce((t, i) => t + this.balanceOf(i), 0),
+          other_on_hand: other.reduce((t, i) => t + Math.max(0, this.balanceOf(i)), 0),
+          other_qty: fromOther.reduce((t, s) => t + s.qty, 0),
+          other_systems: [...new Set(fromOther.map((s) => s.system_ref || "no system"))],
+          short: Math.max(0, remaining),
+          known: !!primary,
+          // In the list, but only as material held for other jobs.
+          held_elsewhere: !primary && all.length > 0,
+          sources,
         };
       });
     },
     get wizardShortage() { return this.wizardLines.some((l) => l.short > 0 || !l.known); },
+    get wizardOtherSystem() { return this.wizardLines.filter((l) => l.known && l.other_qty > 0); },
 
     /* ---------------- lifecycle ---------------- */
     async initApp() {
@@ -4954,6 +5106,151 @@ document.addEventListener("alpine:init", () => {
       } finally { this.saving = false; }
     },
 
+    /* ---------------- villa leftovers ------------------------------------
+       Material bought for a villa that was never issued. While the villa is
+       running it stays reserved; once it is finished the leftovers go back to
+       main stock, onto the line for the same article and system. This is the
+       same kind of move as a transfer — received comes off the villa line and
+       goes on to the main-stock line, with a matched pair of ledger entries —
+       so the business's received/issued totals are left alone.
+    -------------------------------------------------------------------- */
+    /* The job a villa holding belongs to, if its name matches a project. */
+    villaProject(holding) {
+      const norm = (v) => String(v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const h = norm(holding);
+      if (!h) return null;
+      return this.projects.find((p) => norm(p.project_code) === h) ||
+             this.projects.find((p) => { const c = norm(p.project_code); return c && (c.startsWith(h) || h.startsWith(c)); }) ||
+             null;
+    },
+    villaStatus(holding) { const p = this.villaProject(holding); return p ? (p.status || "active") : ""; },
+
+    get leftoverVillas() {
+      return [...new Set(this.inventory.map((i) => this.holdingOf(i)).filter((h) => key(h) !== "stock"))]
+        .sort((a, b) => a.localeCompare(b));
+    },
+    get leftoverRows() {
+      const q = key(this.searchQuery);
+      return this.inventory
+        .filter((i) => key(this.holdingOf(i)) !== "stock" && this.balanceOf(i) > 0)
+        .filter((i) => this.leftoverVilla === "ALL" || this.holdingOf(i) === this.leftoverVilla)
+        .filter((i) => !this.leftoverDoneOnly || this.villaStatus(this.holdingOf(i)) === "complete")
+        .filter((i) => !q || [i.article_ref, i.description, i.system_ref, this.holdingOf(i)]
+          .some((v) => key(v).includes(q)))
+        .sort((a, b) => (this.holdingOf(a) + "|" + (a.system_ref || "") + "|" + a.article_ref)
+          .localeCompare(this.holdingOf(b) + "|" + (b.system_ref || "") + "|" + b.article_ref));
+    },
+    get leftoverGroups() {
+      const map = new Map();
+      for (const i of this.leftoverRows) {
+        const h = this.holdingOf(i);
+        if (!map.has(h)) map.set(h, { holding: h, status: this.villaStatus(h), rows: [], units: 0 });
+        const g = map.get(h);
+        g.rows.push(i);
+        g.units += this.balanceOf(i);
+      }
+      return [...map.values()];
+    },
+    get leftoverSelected() { return this.leftoverRows.filter((i) => this.leftoverSel[i.id]); },
+    get leftoverNegative() {
+      return this.inventory.filter((i) => key(this.holdingOf(i)) !== "stock" && this.balanceOf(i) < 0 &&
+        (this.leftoverVilla === "ALL" || this.holdingOf(i) === this.leftoverVilla));
+    },
+    /* The main-stock line the leftover would go back to (same article + system). */
+    mainStockLine(item) {
+      const k = stockKey(item.article_ref, item.system_ref, "Stock");
+      return this.inventory.find((i) => stockKey(i.article_ref, i.system_ref, this.holdingOf(i)) === k) || null;
+    },
+
+    exportLeftovers() {
+      const rows = [["held_for", "job_status", "system_ref", "article_ref", "description", "unit",
+                     "received_qty", "issued_qty", "left_over"]];
+      for (const i of this.leftoverRows) {
+        rows.push([this.holdingOf(i), this.villaStatus(this.holdingOf(i)), i.system_ref || "",
+                   i.article_ref, i.description || "", i.unit || "",
+                   num(i.received_qty), num(i.issued_qty), this.balanceOf(i)]);
+      }
+      downloadCsv(rows, "eurolux-villa-leftovers-" + new Date().toISOString().slice(0, 10) + ".csv");
+    },
+
+    async returnLeftovers(items) {
+      if (this.saving) return;
+      const rows = (items || []).filter((i) => this.balanceOf(i) > 0);
+      if (!rows.length) { this.toast("Nothing left over to move.", "err"); return; }
+
+      const villas = [...new Set(rows.map((i) => this.holdingOf(i)))];
+      const open = villas.filter((h) => this.villaStatus(h) !== "complete");
+      const units = rows.reduce((t, i) => t + this.balanceOf(i), 0);
+      if (!confirm(
+        "Move " + rows.length + " leftover line(s), " + this.fmt(units) + " units in all, to main stock?\n\n" +
+        "From: " + villas.join(", ") +
+        (open.length
+          ? "\n\n⚠ Not marked complete: " + open.join(", ") +
+            ".\nOnly continue if you are sure this material will not be needed for that villa."
+          : "") +
+        "\n\nEach article goes back to main stock under the same system, and both villa and main stock are updated in the ledger.")) return;
+
+      this.saving = true;
+      try {
+        const stamp = { updatedAt: serverTimestamp(), updatedBy: this.displayName };
+        const created = new Map();   // stockKey -> new main-stock line id (shared across villas)
+        const ops = [];
+        for (const i of rows) {
+          const qty = this.balanceOf(i);
+          const villa = this.holdingOf(i);
+          const k = stockKey(i.article_ref, i.system_ref, "Stock");
+          let target = this.mainStockLine(i);
+          let targetId = target ? target.id : created.get(k);
+          if (!targetId) {
+            const ref = doc(collection(db, collections.inventory));
+            targetId = ref.id;
+            created.set(k, targetId);
+            ops.push((b) => b.set(ref, {
+              article_ref: i.article_ref, description: i.description || "",
+              system_ref: i.system_ref || "", holding: "Stock",
+              unit: i.unit || "", location: "", min_qty: 0,
+              pu_qty: this.puQty(i) > 1 ? this.puQty(i) : 1, pack_unit: this.packUnit(i) || "PKT",
+              bar_length: this.barLength(i) || 0, on_order: 0,
+              received_qty: 0, issued_qty: 0, balance_stock_qty: 0,
+              createdAt: serverTimestamp(), createdBy: this.displayName, ...stamp,
+            }));
+          }
+          const tid = targetId;
+          const xid = doc(collection(db, collections.movements)).id;
+          const common = {
+            article_ref: i.article_ref, description: i.description || "",
+            type: "transfer", qty, transfer_id: xid,
+            project_id: "", project_code: "",
+            at: serverTimestamp(), by: this.authUser.uid, by_name: this.displayName,
+          };
+          ops.push((b) => b.update(doc(db, collections.inventory, i.id),
+            { received_qty: increment(-qty), balance_stock_qty: increment(-qty), ...stamp }));
+          ops.push((b) => b.update(doc(db, collections.inventory, tid),
+            { received_qty: increment(qty), balance_stock_qty: increment(qty), ...stamp }));
+          ops.push((b) => b.set(doc(collection(db, collections.movements)), {
+            ...common, item_id: i.id, system_ref: i.system_ref || "", holding: villa,
+            direction: "out", note: "Villa leftover returned to main stock",
+          }));
+          ops.push((b) => b.set(doc(collection(db, collections.movements)), {
+            ...common, item_id: tid, system_ref: i.system_ref || "", holding: "Stock",
+            direction: "in", note: "Villa leftover returned from " + villa,
+          }));
+        }
+        // Each new main-stock line is created earlier in ops than any update to
+        // it, and the chunks are committed in order, so the create always lands first.
+        for (let n = 0; n < ops.length; n += 400) {
+          const batch = writeBatch(db);
+          ops.slice(n, n + 400).forEach((op) => op(batch));
+          this.track(batch.commit(), "the leftovers");
+        }
+        this.leftoverSel = {};
+        this.toast(this.savedMsg(rows.length + " leftover line(s) moved to main stock" +
+          (created.size ? " — " + created.size + " new main-stock line(s) created." : ".")), "ok");
+      } catch (e) {
+        this.toast("Could not move the leftovers: " + e.message, "err");
+      } finally { this.saving = false; }
+    },
+
     /* ---------------- projects ---------------- */
     openProject(p = null, seedName = "") {
       this.projectForm = p
@@ -5244,41 +5541,71 @@ document.addEventListener("alpine:init", () => {
 
       const unknown = lines.filter((l) => !l.known);
       const issuable = lines.filter((l) => l.known);
-      if (!issuable.length) { this.toast("None of these articles are in the stock list.", "err"); return; }
+      if (!issuable.length) { this.toast("None of these articles are in main stock.", "err"); return; }
 
+      // 1. Material that would come from main stock filed under another system.
+      const bomSystem = this.selectedBom.system_ref || "this system";
+      const otherLines = issuable.filter((l) => l.other_qty > 0);
+      if (otherLines.length) {
+        const list = otherLines.map((l) =>
+          "• " + l.article_ref + " " + l.description + ": " + this.fmt(l.other_qty) +
+          " from " + l.other_systems.join(", ")).join("\n");
+        if (!confirm(
+          "⚠ Different system\n\n" +
+          otherLines.length + " line(s) are not fully in main stock under " + bomSystem +
+          ". They are in main stock under a different system:\n\n" + list +
+          "\n\nIssue them from that stock?")) {
+          this.toast("Booking cancelled. Nothing was posted.", "err");
+          return;
+        }
+      }
+
+      // 2. The usual summary.
       const shortLines = issuable.filter((l) => l.short > 0);
       const msg =
         "Book " + this.wizard.units + " × " + this.selectedBom.name +
         " to " + project.project_code + "?\n\n" +
-        issuable.length + " profile line(s) will be issued." +
+        issuable.length + " profile line(s) will be issued from main stock." +
         (unknown.length
-          ? "\n\n" + unknown.length + " article(s) are not in the stock list and will be skipped:\n" +
+          ? "\n\n" + unknown.length + " article(s) are not in main stock and will be skipped:\n" +
             unknown.map((l) => l.article_ref).join(", ")
           : "") +
         (shortLines.length
-          ? "\n\n⚠ " + shortLines.length + " line(s) exceed available stock and will go negative."
+          ? "\n\n⚠ " + shortLines.length + " line(s) exceed main stock and will go negative."
           : "");
       if (!confirm(msg)) return;
 
       this.issuing = true;
       try {
-        const batch = writeBatch(db);
+        const baseNote = "BOM: " + this.selectedBom.name + " × " + this.wizard.units;
+        const writes = [];
         for (const l of issuable) {
-          batch.update(doc(db, collections.inventory, l.item_id), {
-            issued_qty: increment(l.required),
-            balance_stock_qty: increment(-l.required),
-            updatedAt: serverTimestamp(),
-            updatedBy: this.displayName,
-          });
-          batch.set(doc(collection(db, collections.movements)), {
-            item_id: l.item_id, article_ref: l.article_ref, description: l.description,
-            system_ref: l.system_ref || "", type: "issue", qty: l.required,
-            project_id: project.id, project_code: project.project_code,
-            note: "BOM: " + this.selectedBom.name + " × " + this.wizard.units,
-            at: serverTimestamp(), by: this.authUser.uid, by_name: this.displayName,
-          });
+          for (const s of l.sources) {
+            if (!(s.qty > 0)) continue;
+            writes.push((batch) => {
+              batch.update(doc(db, collections.inventory, s.item_id), {
+                issued_qty: increment(s.qty),
+                balance_stock_qty: increment(-s.qty),
+                updatedAt: serverTimestamp(),
+                updatedBy: this.displayName,
+              });
+              batch.set(doc(collection(db, collections.movements)), {
+                item_id: s.item_id, article_ref: l.article_ref, description: l.description,
+                system_ref: s.system_ref || "", holding: "Stock", type: "issue", qty: s.qty,
+                project_id: project.id, project_code: project.project_code,
+                note: baseNote + (s.other ? " (from " + (s.system_ref || "no system") +
+                                  " stock, BOM system " + bomSystem + ")" : ""),
+                at: serverTimestamp(), by: this.authUser.uid, by_name: this.displayName,
+              });
+            });
+          }
         }
-        this.track(batch.commit(), "the bundle");
+        // Two writes per source; stay well under Firestore's 500-write batch limit.
+        for (let i = 0; i < writes.length; i += 200) {
+          const batch = writeBatch(db);
+          writes.slice(i, i + 200).forEach((w) => w(batch));
+          this.track(batch.commit(), "the bundle");
+        }
         this.toast(this.savedMsg("Package bundle booked to " + project.project_code +
                    " — " + issuable.length + " lines posted."), "ok");
         this.go("projects");
