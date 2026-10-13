@@ -280,6 +280,14 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
 .modal-foot{padding:1rem 1.25rem;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:.6rem;
   position:sticky;bottom:0;background:var(--panel)}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.linkish{background:none;border:0;padding:0;margin:0;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(56,189,248,.45);text-underline-offset:3px}
+.linkish:hover{text-decoration-color:currentColor}
+button.pill{cursor:pointer;font:inherit;font-size:.72rem}
+.sub-line{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center;padding:.15rem 0}
+.sub-edit{display:grid;grid-template-columns:130px 1fr 1fr auto;gap:.5rem;margin-bottom:.5rem}
+.pick-row{display:flex;gap:.6rem;align-items:center;padding:.55rem 0;border-bottom:1px solid var(--line)}
+.pick-row .grow{flex:1;min-width:0}
+@media (max-width:640px){.sub-edit{grid-template-columns:1fr 1fr}}
 .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem}
 
 .toasts{position:fixed;z-index:80;right:1rem;bottom:1rem;display:flex;flex-direction:column;gap:.5rem;max-width:min(92vw,380px)}
@@ -461,7 +469,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
             posted on one device appears on every other device within a second.
           </p>
         </div>
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.20, 2026年9月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.23, 2026年10月 - アイカ 🤌🏽</p>
       </div>
     </div>
   </template>
@@ -608,7 +616,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
               <div class="kpi-value" style="color:var(--warn)" x-text="fmt(totals.onOrder)"></div>
               <div class="kpi-foot"
                    x-text="`ordered, not yet delivered \u00b7 ${fmt(onOrderItems.length)} article(s)`"></div>
-              <div class="kpi-hint" x-show="onOrderItems.length">SEE THE LIST \u2192</div>
+              <div class="kpi-hint" x-show="onOrderItems.length">SEE THE LIST →</div>
             </div>
           </div>
 
@@ -936,6 +944,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                 <option value="order">Orders placed</option>
                 <option value="adjust">Adjustments</option>
               </select>
+              <button class="btn btn-sm" @click="exportLedger()" :disabled="!filteredMovements.length">Export CSV</button>
             </div>
           </div>
 
@@ -1037,7 +1046,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                 <div class="grid-3">
                   <div class="field">
                     <label class="label">1. System fabrication variant</label>
-                    <select class="select" x-model="wizard.bomId">
+                    <select class="select" x-model="wizard.bomId" @change="wizard.subs = {}">
                       <option value="">— Choose system —</option>
                       <template x-for="b in boms" :key="b.id">
                         <option :value="b.id" x-text="b.name"></option>
@@ -1084,7 +1093,18 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                 <div class="banner banner-warn">
                   <div>
                     <strong>Insufficient stock for this bundle.</strong><br>
-                    <span x-text="`${wizardLines.filter(l=>l.short>0||!l.known).length} of ${wizardLines.length} lines cannot be covered by the current warehouse balance. Booking anyway drives those articles negative — the ledger stays correct, but the shortfall has to be purchased.`"></span>
+                    <span x-text="`${wizardLines.filter(l=>l.short>0||!l.known).length} of ${wizardLines.length} lines cannot be covered by main stock (all systems included). Booking anyway drives those articles negative — the ledger stays correct, but the shortfall has to be purchased.`"></span>
+                  </div>
+                </div>
+              </template>
+
+              <template x-if="wizardOtherSystem.length">
+                <div class="banner banner-info">
+                  <div>
+                    <strong>Some lines come from a different system.</strong><br>
+                    <span x-text="`${wizardOtherSystem.length} line(s) are not fully in main stock under ${selectedBom?.system_ref || 'this system'}, but are in main stock under another system: ` +
+                      wizardOtherSystem.map(l => `${l.article_ref} (${fmt(l.other_qty)} from ${l.other_systems.join(', ')})`).join('; ') +
+                      `. You will be asked to confirm before they are booked.`"></span>
                   </div>
                 </div>
               </template>
@@ -1095,21 +1115,41 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                     <thead><tr>
                       <th>Article</th><th>Material Description</th>
                       <th class="right">Per unit</th><th class="right">Required count</th>
-                      <th class="right">On hand</th><th class="right">Short by</th><th>Status</th>
+                      <th class="right">On hand (this system)</th><th class="right">Other systems</th>
+                      <th class="right">Short by</th><th>Status</th>
                     </tr></thead>
                     <tbody>
-                      <template x-for="l in wizardLines" :key="l.article_ref">
+                      <template x-for="l in wizardLines" :key="l.bom_ref">
                         <tr :class="(l.short>0 || !l.known) && 'row-bad'">
-                          <td class="mono" style="color:var(--accent);font-weight:700" x-text="l.article_ref"></td>
+                          <td class="mono" style="color:var(--accent);font-weight:700">
+                            <span x-text="l.article_ref"></span>
+                            <div class="faint" style="font-size:.7rem;font-weight:400;white-space:nowrap" x-show="l.sub"
+                                 x-text="'instead of ' + l.bom_ref"></div>
+                          </td>
                           <td x-text="l.description"></td>
                           <td class="right num muted" x-text="fmt(l.qty_per)"></td>
                           <td class="right num" style="font-weight:700" x-text="fmt(l.required)"></td>
                           <td class="right num" x-text="l.known ? fmt(l.on_hand) : '—'"></td>
+                          <td class="right num" :title="l.other_systems.join(', ')"
+                              :style="l.other_qty>0 ? 'color:var(--accent);font-weight:700' : 'color:var(--faint)'"
+                              x-text="l.known ? (l.other_qty>0 ? fmt(l.other_qty) + ' used' : fmt(l.other_on_hand)) : '—'"></td>
                           <td class="right num" :style="l.short>0 ? 'color:var(--bad);font-weight:700' : 'color:var(--faint)'"
                               x-text="fmt(l.short)"></td>
                           <td>
-                            <span class="pill" :class="!l.known ? 'pill-bad' : (l.short>0 ? 'pill-warn' : 'pill-good')"
-                                  x-text="!l.known ? 'not in stock list' : (l.short>0 ? 'short' : 'available')"></span>
+                            <div class="row" style="gap:.35rem;flex-wrap:nowrap">
+                              <template x-if="l.held_elsewhere || (l.known && l.short > 0)">
+                                <button type="button" class="pill" :class="l.held_elsewhere ? 'pill-bad' : 'pill-warn'"
+                                        @click="openWhere(l.article_ref)" title="See where it is held"
+                                        x-text="(l.held_elsewhere ? 'only held for other jobs' : 'short') + ' \u203a'"></button>
+                              </template>
+                              <template x-if="!(l.held_elsewhere || (l.known && l.short > 0))">
+                                <span class="pill"
+                                      :class="!l.known ? 'pill-bad' : (l.sub ? 'pill-info' : (l.other_qty>0 ? 'pill-info' : 'pill-good'))"
+                                      x-text="!l.known ? 'not in stock list' : (l.sub ? 'substitute' : (l.other_qty>0 ? 'other system' : 'available'))"></span>
+                              </template>
+                              <button type="button" class="btn btn-sm" x-show="!l.known || l.short > 0 || l.sub"
+                                      @click="openPick('bom', l)" x-text="l.sub ? 'Change' : 'Substitute\u2026'"></button>
+                            </div>
                           </td>
                         </tr>
                       </template>
@@ -1277,6 +1317,9 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                         <span class="mono" style="font-size:.78rem" x-text="dn.fileName"></span>
                         <span x-show="dn.dated" x-text="' \u00b7 dated ' + dn.dated"></span>
                       </p>
+                      <p class="view-sub" x-show="dn.custRef">
+                        Customer ref: <span x-text="dn.custRef"></span>
+                      </p>
                     </div>
                     <div class="row" style="gap:1.4rem">
                       <div class="right">
@@ -1301,15 +1344,27 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                     </div>
                   </div>
 
-                  <div class="grid-2" style="margin-top:1rem">
+                  <div class="grid-3" style="margin-top:1rem">
                     <div class="field">
-                      <label class="label">Receive into *</label>
-                      <select id="dn-holding" class="select" x-model="dn.holding">
-                        <option value="Stock">Main stock</option>
-                        <template x-for="h in holdings.filter(x => x !== 'Stock')" :key="h">
-                          <option :value="h" x-text="'Allocated to ' + h"></option>
+                      <label class="label">Send every line to *</label>
+                      <select id="dn-holding" class="select" :value="dnAllDest" @change="dnApplyDest($event.target.value)">
+                        <option value="__mixed" x-show="dnAllDest === '__mixed'" disabled>Mixed — set per line below</option>
+                        <template x-for="d in dnDestinations" :key="d.value">
+                          <option :value="d.value" x-text="d.label" :selected="d.value === dnAllDest"></option>
+                        </template>
+                        <option value="__newjob">+ Create a new job…</option>
+                      </select>
+                      <span class="hint">Main stock, or a job. Change single lines in the table below.</span>
+                    </div>
+                    <div class="field">
+                      <label class="label">System</label>
+                      <select class="select" :value="dn.system" @change="dnApplySystem($event.target.value)">
+                        <option value="__auto">Each article's usual system</option>
+                        <template x-for="sys in systemOptions" :key="sys">
+                          <option :value="sys" x-text="sys" :selected="sys === dn.system"></option>
                         </template>
                       </select>
+                      <span class="hint">Choose one to put every line under that system.</span>
                     </div>
                     <div class="field">
                       <label class="label">Note</label>
@@ -1324,13 +1379,34 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                 </div>
               </div>
 
+              <template x-if="dnRefJob && dnAllDest !== dnHoldingForProject(dnRefJob)">
+                <div class="banner banner-info">
+                  <div style="width:100%">
+                    <strong x-text="`This note looks like it is for ${dnRefJob.project_code}.`"></strong>
+                    The customer reference mentions it.
+                    <div class="row" style="margin-top:.6rem">
+                      <button class="btn btn-sm btn-primary" @click="dnApplyDest(dnHoldingForProject(dnRefJob))"
+                              x-text="`Send every line to ${dnRefJob.project_code}`"></button>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <template x-if="dnDestSummary.length > 1">
+                <div class="banner banner-info">
+                  <div>
+                    <strong>This delivery is split.</strong>
+                    <span x-text="dnDestSummary.map(d => `${fmt(d.lines)} line(s) to ${d.label}`).join('; ') + '.'"></span>
+                  </div>
+                </div>
+              </template>
+
               <template x-if="dnMissing.length">
                 <div class="banner banner-warn">
                   <div>
-                    <strong x-text="`${fmt(dnMissing.length)} article(s) are not in your stock list.`"></strong>
-                    They will be created in
-                    <strong x-text="dn.holding === 'Stock' ? 'main stock' : dn.holding"></strong>
-                    with the description and pack size from the note:
+                    <strong x-text="`${fmt(dnMissing.length)} line(s) have no stock line yet.`"></strong>
+                    They will be created where you are sending them, with the description and pack size
+                    <span x-text="dnMissing.some(l => !dnTemplate(l.art)) ? 'from the note' : 'already on the stock list'"></span>:
                     <span class="mono" style="font-size:.78rem"
                           x-text="dnMissing.slice(0,8).map(l => l.art).join(', ') + (dnMissing.length > 8 ? '…' : '')"></span>
                   </div>
@@ -1348,33 +1424,56 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                       <th>Line</th><th>Article</th><th>Description</th>
                       <th class="right">Delivered</th><th>Pack</th>
                       <th class="right">PU Qty</th><th class="right">Units in</th>
-                      <th class="right">On hand</th><th class="right">After</th><th>Stock</th>
+                      <th>Send to</th><th>System</th>
+                      <th class="right">On hand</th><th class="right">After</th><th>Stock line</th>
                     </tr></thead>
                     <tbody>
                       <template x-for="l in dn.lines" :key="l.line + l.art">
                         <tr>
                           <td class="faint" x-text="l.line"></td>
                           <td class="mono" style="color:var(--accent);font-weight:700" x-text="l.art"></td>
-                          <td class="truncate" style="max-width:230px" x-text="l.desc"></td>
+                          <td class="truncate" style="max-width:170px" x-text="l.desc"></td>
                           <td class="right">
                             <input class="input num" type="number" min="0" step="any"
-                                   style="max-width:92px;margin-left:auto"
+                                   style="width:76px;min-width:76px;margin-left:auto"
+                                   :aria-label="'Delivered ' + l.art"
                                    :value="l.qty" @input="l.qty = num($event.target.value)">
                           </td>
                           <td class="faint" x-text="l.unit || '—'"></td>
                           <td class="right">
                             <input class="input num" type="number" min="1" step="any"
-                                   style="max-width:92px;margin-left:auto"
+                                   style="width:76px;min-width:76px;margin-left:auto"
+                                   :aria-label="'Pack size ' + l.art"
                                    :value="l.pu" @input="l.pu = Math.max(1, num($event.target.value))">
                           </td>
                           <td class="right num" style="font-weight:700" x-text="fmt(dnUnits(l))"></td>
-                          <td class="right num muted"
-                              x-text="dnItem(l.art) ? fmt(balanceOf(dnItem(l.art))) : '—'"></td>
-                          <td class="right num" style="color:var(--good);font-weight:700"
-                              x-text="fmt((dnItem(l.art) ? balanceOf(dnItem(l.art)) : 0) + dnUnits(l))"></td>
                           <td>
-                            <span class="pill" :class="dnItem(l.art) ? 'pill-good' : 'pill-warn'"
-                                  x-text="dnItem(l.art) ? 'known' : 'new'"></span>
+                            <select class="select" style="min-width:170px;max-width:220px;padding-block:.35rem"
+                                    :aria-label="'Send ' + l.art + ' to'"
+                                    @change="dnSetLineDest(l, $event.target.value)">
+                              <template x-for="d in dnDestinations" :key="d.value">
+                                <option :value="d.value" x-text="d.short" :selected="d.value === l.dest"></option>
+                              </template>
+                              <option value="__newjob">+ New job…</option>
+                            </select>
+                          </td>
+                          <td>
+                            <select class="select" style="min-width:150px;max-width:200px;padding-block:.35rem"
+                                    :aria-label="'System for ' + l.art" @change="l.sys = $event.target.value">
+                              <option value="" :selected="!l.sys">(no system)</option>
+                              <template x-for="sys in dnSystemsFor(l)" :key="sys">
+                                <option :value="sys" x-text="sys" :selected="sys === l.sys"></option>
+                              </template>
+                            </select>
+                          </td>
+                          <td class="right num muted"
+                              x-text="dnTarget(l) ? fmt(balanceOf(dnTarget(l))) : '—'"></td>
+                          <td class="right num" style="color:var(--good);font-weight:700"
+                              x-text="fmt((dnTarget(l) ? balanceOf(dnTarget(l)) : 0) + dnUnits(l))"></td>
+                          <td>
+                            <span class="pill" :class="dnTarget(l) ? 'pill-good' : (dnTemplate(l.art) ? 'pill-info' : 'pill-warn')"
+                                  :title="dnTarget(l) ? '' : (dnTemplate(l.art) ? 'The article is on the stock list, but not under this system and holding yet. The line is created for you.' : 'A new article. It is created from the note.')"
+                                  x-text="dnTarget(l) ? 'known' : (dnTemplate(l.art) ? 'new line' : 'new article')"></span>
                           </td>
                         </tr>
                       </template>
@@ -1386,7 +1485,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                         x-text="`${fmt(dnActive.length)} line(s) will post, ${fmt(dnTotalUnits)} units in total`"></span>
                   <button class="btn btn-primary" @click="postDeliveryNote()"
                           :disabled="dnPosting || !dnActive.length">
-                    <span x-show="dnPosting" class="spinner"></span><span>Receive into stock</span>
+                    <span x-show="dnPosting" class="spinner"></span><span>Receive delivery</span>
                   </button>
                 </div>
               </div>
@@ -1551,14 +1650,17 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                       <th class="right">MTO qty</th><th class="right">PU</th>
                       <th class="right">Required</th><th>Unit</th>
                       <th class="right">Deduct</th><th class="right">On hand</th>
-                      <th class="right">After</th><th>In holding</th>
+                      <th class="right">After</th><th>Stock list</th>
                     </tr></thead>
                     <tbody>
                       <template x-for="l in mtoVisible" :key="l.art + l.sec">
                         <tr :class="mtoAfter(l) < 0 && 'row-bad'">
                           <td class="faint" x-text="l.sec"></td>
-                          <td class="mono" style="color:var(--accent);font-weight:700" x-text="l.art"></td>
-                          <td class="truncate" style="max-width:230px" x-text="l.desc"></td>
+                          <td class="mono" style="color:var(--accent);font-weight:700">
+                            <span x-text="mtoArt(l)"></span>
+                            <div class="faint" style="font-size:.7rem;font-weight:400;white-space:nowrap" x-show="l.sub" x-text="'instead of ' + l.art"></div>
+                          </td>
+                          <td class="truncate" style="max-width:230px" x-text="l.sub ? (l.subDesc || articleDesc(l.sub)) : l.desc"></td>
                           <td class="right num muted" x-text="fmt(l.qty)"></td>
                           <td class="right num faint" x-text="l.pu ? fmt(l.pu) : '—'"></td>
                           <td class="right num muted" x-text="fmt(l.req)"></td>
@@ -1568,13 +1670,17 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
                                    style="max-width:110px;margin-left:auto"
                                    :value="l.deduct" @input="l.deduct = num($event.target.value)">
                           </td>
-                          <td class="right num" x-text="mtoItem(l.art) ? fmt(balanceOf(mtoItem(l.art))) : '—'"></td>
+                          <td class="right num" x-text="mtoItem(mtoArt(l)) ? fmt(balanceOf(mtoItem(mtoArt(l)))) : '—'"></td>
                           <td class="right num" style="font-weight:700"
                               :style="mtoAfter(l) < 0 ? 'color:var(--bad);font-weight:700' : 'font-weight:700'"
                               x-text="fmt(mtoAfter(l))"></td>
                           <td>
-                            <span class="pill" :class="mtoItem(l.art) ? 'pill-good' : 'pill-warn'"
-                                  x-text="mtoItem(l.art) ? 'known' : 'new'"></span>
+                            <div class="row" style="gap:.35rem;flex-wrap:nowrap">
+                              <span class="pill" :class="l.sub ? 'pill-info' : (mtoItem(mtoArt(l)) ? 'pill-good' : 'pill-warn')"
+                                    x-text="l.sub ? 'substitute' : (mtoItem(mtoArt(l)) ? 'known' : 'not in stock list')"></span>
+                              <button type="button" class="btn btn-sm" x-show="l.sub || !mtoItem(mtoArt(l)) || mtoAfter(l) < 0"
+                                      @click="openPick('mto', l)" x-text="l.sub ? 'Change' : 'Substitute\u2026'"></button>
+                            </div>
                           </td>
                         </tr>
                       </template>
@@ -1866,6 +1972,164 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
           </template>
         </div>
 
+        <!-- ============ VILLA LEFTOVERS ============ -->
+        <div id="view-leftovers" x-show="currentTab==='leftovers'" class="stack">
+          <div class="view-head">
+            <div>
+              <h2 class="view-title">Villa Leftovers</h2>
+              <p class="view-sub">Material still held for a villa after issuing. Once a villa is finished, return what is left to main stock.</p>
+            </div>
+            <div class="actions">
+              <select class="select" style="width:auto;min-width:200px" x-model="leftoverVilla" @change="leftoverSel={}">
+                <option value="ALL">All villas</option>
+                <template x-for="h in leftoverVillas" :key="h">
+                  <option :value="h" x-text="h"></option>
+                </template>
+              </select>
+              <label class="row" style="gap:.4rem;font-size:.85rem;white-space:nowrap">
+                <input type="checkbox" x-model="leftoverDoneOnly" @change="leftoverSel={}">
+                Completed villas only
+              </label>
+              <button class="btn btn-sm" @click="exportLeftovers()" :disabled="!leftoverRows.length">Export CSV</button>
+              <button class="btn btn-sm btn-primary" @click="returnLeftovers(leftoverSelected)"
+                      :disabled="!leftoverSelected.length || saving">
+                <span x-show="saving" class="spinner"></span>
+                <span x-text="`Move ${fmt(leftoverSelected.length)} selected to main stock`"></span>
+              </button>
+            </div>
+          </div>
+
+          <template x-if="!leftoverRows.length">
+            <div class="card empty">
+              <div class="empty-title">No leftovers</div>
+              <div x-text="searchQuery ? 'Nothing matches your search here.'
+                : (leftoverDoneOnly ? 'No completed villa has material left over.' : 'No villa has material left over.')"></div>
+            </div>
+          </template>
+
+          <template x-for="g in leftoverGroups" :key="g.holding">
+            <div class="card">
+              <div class="card-pad" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;border-bottom:1px solid var(--line)">
+                <div class="row" style="gap:.6rem">
+                  <input type="checkbox" :checked="g.rows.every(r => leftoverSel[r.id])"
+                         @change="g.rows.forEach(r => leftoverSel[r.id] = $event.target.checked)"
+                         :aria-label="'Select all leftovers for ' + g.holding">
+                  <h3 style="font-size:.95rem" x-text="g.holding"></h3>
+                  <span class="pill" :class="g.status==='complete' ? 'pill-good' : (g.status ? 'pill-info' : 'pill-mute')"
+                        x-text="g.status || 'no matching job'"></span>
+                </div>
+                <div class="row">
+                  <span class="hint" x-text="`${fmt(g.rows.length)} article(s) · ${fmt(g.units)} units left`"></span>
+                  <button class="btn btn-sm" @click="returnLeftovers(g.rows)" :disabled="saving">
+                    Move all to main stock
+                  </button>
+                </div>
+              </div>
+              <div class="table-wrap" style="border:0;border-radius:0">
+                <table>
+                  <thead><tr>
+                    <th style="width:2rem"></th>
+                    <th>System</th><th>Article</th><th>Description</th><th>Unit</th>
+                    <th class="right">Received</th><th class="right">Issued</th>
+                    <th class="right">Left over</th><th class="right">Main stock now</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="i in g.rows" :key="i.id">
+                      <tr>
+                        <td><input type="checkbox" x-model="leftoverSel[i.id]" :aria-label="'Select ' + i.article_ref"></td>
+                        <td class="muted truncate" style="max-width:190px" x-text="i.system_ref || '—'"></td>
+                        <td class="mono" style="color:var(--accent);font-weight:700" x-text="i.article_ref"></td>
+                        <td x-text="i.description"></td>
+                        <td class="faint" x-text="i.unit || '—'"></td>
+                        <td class="right num muted" x-text="fmt(num(i.received_qty))"></td>
+                        <td class="right num muted" x-text="fmt(num(i.issued_qty))"></td>
+                        <td class="right num" style="font-weight:700">
+                          <div x-text="fmt(balanceOf(i))"></div>
+                          <div class="faint" style="font-size:.7rem" x-show="isPacked(i)"
+                               x-text="packNote(i, balanceOf(i))"></div>
+                        </td>
+                        <td class="right num muted"
+                            x-text="mainStockLine(i) ? fmt(balanceOf(mainStockLine(i))) : 'new line'"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="leftoverNegative.length">
+            <p class="hint" x-text="`${fmt(leftoverNegative.length)} villa line(s) are negative (issued more than received) and are not shown here — see Reports → Negative.`"></p>
+          </template>
+        </div>
+
+        <!-- ============ SUBSTITUTES ============ -->
+        <div id="view-subs" x-show="currentTab==='subs'" class="stack">
+          <div class="view-head">
+            <div>
+              <h2 class="view-title">Substitutes</h2>
+              <p class="view-sub">Which article can stand in for which. Search here when an item is not in stock.</p>
+            </div>
+            <div class="actions">
+              <button class="btn btn-sm" @click="exportSubs()" :disabled="!substitutes.length">Export CSV</button>
+              <button class="btn btn-sm btn-primary" @click="openSub()">Add substitute</button>
+            </div>
+          </div>
+
+          <template x-if="!subRows.length">
+            <div class="card empty">
+              <div class="empty-title" x-text="searchQuery ? 'No substitutes match' : 'No substitutes recorded yet'"></div>
+              <div style="max-width:58ch;margin-inline:auto"
+                   x-text="searchQuery ? 'Nothing here mentions \u201c' + searchQuery + '\u201d, as the article or as a substitute.' : 'Record an article and the articles that can replace it. They are offered whenever the BOM Wizard or an MTO finds the article missing or short.'"></div>
+              <button class="btn btn-primary" style="margin-top:1rem" x-show="!searchQuery" @click="openSub()">Add the first one</button>
+            </div>
+          </template>
+
+          <template x-if="subRows.length">
+            <div class="table-wrap">
+              <table>
+                <thead><tr>
+                  <th>Article</th><th>Description</th><th class="right">Main stock</th>
+                  <th>Can be replaced by</th><th class="right col-actions">Actions</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="r in subRows" :key="r.id">
+                    <tr>
+                      <td class="mono" style="color:var(--accent);font-weight:700;vertical-align:top">
+                        <button type="button" class="linkish mono" @click="openWhere(r.article_ref)" x-text="r.article_ref"
+                                title="Where is this article held?"></button>
+                      </td>
+                      <td style="vertical-align:top">
+                        <div x-text="r.description || articleDesc(r.article_ref) || '—'"></div>
+                        <div class="faint" style="font-size:.75rem" x-show="r.note" x-text="r.note"></div>
+                      </td>
+                      <td class="right num" style="vertical-align:top"
+                          :style="mainStockOf(r.article_ref) > 0 ? '' : 'color:var(--bad)'"
+                          x-text="fmt(mainStockOf(r.article_ref))"></td>
+                      <td style="vertical-align:top">
+                        <template x-for="x in (r.subs || [])" :key="x.article_ref">
+                          <div class="sub-line">
+                            <button type="button" class="linkish mono" style="color:var(--accent);font-weight:700"
+                                    @click="openWhere(x.article_ref)" x-text="x.article_ref"></button>
+                            <span x-text="x.description || articleDesc(x.article_ref) || ''"></span>
+                            <span class="pill" :class="mainStockOf(x.article_ref) > 0 ? 'pill-good' : 'pill-mute'"
+                                  x-text="mainStockOf(x.article_ref) > 0 ? fmt(mainStockOf(x.article_ref)) + ' in main stock' : 'none in main stock'"></span>
+                            <span class="faint" style="font-size:.75rem" x-show="x.note" x-text="'\u2014 ' + x.note"></span>
+                          </div>
+                        </template>
+                      </td>
+                      <td class="right col-actions" style="vertical-align:top">
+                        <button class="btn btn-sm btn-ghost" @click="openSub(r)">Edit</button>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </template>
+          <p class="hint" x-show="subRows.length" x-text="`${fmt(subRows.length)} of ${fmt(substitutes.length)} article(s). Search finds an article whether it is the one being replaced or the substitute. Click a code to see where it is held.`"></p>
+        </div>
+
         <div id="view-settings" x-show="currentTab==='settings'" class="stack">
           <div class="view-head">
             <div>
@@ -1895,19 +2159,24 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
           <div class="card card-pad stack" style="max-width:660px">
             <h3 style="font-size:.95rem;color:#fca5a5">Start over</h3>
             <p class="hint" style="margin:0">
-              Deletes every article, job and BOM template so you can import a clean stock list.
-              The movement ledger is <strong>not</strong> touched &mdash; it is an audit trail and
-              nothing in the app can delete it, by design. Clear that from the Firebase console if
-              you really need to.
+              Deletes every article and job so you can import a clean stock list, and forgets which
+              files were imported so the same files can go in again. The movement ledger is
+              <strong>not</strong> touched &mdash; it is an audit trail and nothing in the app can
+              delete it, by design. Clear it from the Firebase console first if you are reloading
+              everything (see the user guide). The substitutes register is always kept.
             </p>
+            <label class="row" style="gap:.5rem;cursor:pointer;font-size:.88rem">
+              <input type="checkbox" x-model="wipeBoms">
+              <span>Also delete the BOM templates</span>
+            </label>
             <div class="row" style="justify-content:space-between;font-size:.85rem">
               <span class="muted">Will be deleted</span>
               <span class="num"
-                    x-text="`${fmt(inventory.length)} articles · ${fmt(projects.length)} jobs · ${fmt(boms.length)} templates`"></span>
+                    x-text="`${fmt(inventory.length)} articles · ${fmt(projects.length)} jobs · ${wipeBoms ? fmt(boms.length) : 0} templates`"></span>
             </div>
             <div class="row">
               <button class="btn btn-danger" @click="wipeData()"
-                      :disabled="saving || (!inventory.length && !projects.length && !boms.length)">
+                      :disabled="saving || (!inventory.length && !projects.length && !(wipeBoms && boms.length))">
                 <span x-show="saving" class="spinner"></span><span>Delete all stock data</span>
               </button>
             </div>
@@ -1945,7 +2214,7 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
           </div>
         </div>
 
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.20, 2026年9月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.23, 2026年10月 - アイカ 🤌🏽</p>
       </div><!-- /view -->
     </main>
   </div>
@@ -2387,6 +2656,17 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
               </div>
             </div>
             <div class="field">
+              <label class="label">Material for this job is held as</label>
+              <select class="select" x-model="projectForm.holding">
+                <option value="">The job's own name (new material)</option>
+                <template x-for="h in projectHoldings" :key="h">
+                  <option :value="h" x-text="h" :selected="h === projectForm.holding"></option>
+                </template>
+              </select>
+              <span class="hint">Which villa holding on the stock list belongs to this job. Deliveries sent to the
+                job land there, and Villa Leftovers shows the job's status beside it.</span>
+            </div>
+            <div class="field">
               <label class="label">Notes</label>
               <textarea class="textarea" x-model.trim="projectForm.notes"></textarea>
             </div>
@@ -2398,6 +2678,192 @@ tfoot td{padding:.7rem .7rem;border-top:1px solid var(--line);background:var(--p
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  </template>
+
+  <!-- ===================== SUBSTITUTE RECORD MODAL ===================== -->
+  <template x-if="subOpen">
+    <div class="backdrop" @click.self="subOpen=false" @keydown.escape.window="subOpen=false">
+      <div class="modal" style="max-width:720px">
+        <div class="modal-head">
+          <h3 x-text="subForm.id ? 'Edit substitutes' : 'Add substitutes'"></h3>
+          <button class="btn btn-sm btn-ghost" @click="subOpen=false">Close</button>
+        </div>
+        <form @submit.prevent="saveSub()">
+          <div class="modal-body">
+            <div class="grid-2">
+              <div class="field">
+                <label class="label">Article code *</label>
+                <input class="input mono" x-model.trim="subForm.article_ref" required list="sub-articles"
+                       @change="if(!subForm.description) subForm.description = articleDesc(subForm.article_ref)"
+                       placeholder="e.g. 218157">
+              </div>
+              <div class="field">
+                <label class="label">Description</label>
+                <input class="input" x-model.trim="subForm.description" placeholder="Filled in from the stock list">
+              </div>
+            </div>
+            <div class="field">
+              <label class="label">Can be replaced by</label>
+              <template x-for="(x, idx) in subForm.subs" :key="idx">
+                <div class="sub-edit">
+                  <input class="input mono" x-model.trim="x.article_ref" list="sub-articles" placeholder="Article code"
+                         :aria-label="'Substitute ' + (idx + 1) + ' code'"
+                         @change="if(!x.description) x.description = articleDesc(x.article_ref)">
+                  <input class="input" x-model.trim="x.description" placeholder="Description"
+                         :aria-label="'Substitute ' + (idx + 1) + ' description'">
+                  <input class="input" x-model.trim="x.note" placeholder="Note, e.g. different finish"
+                         :aria-label="'Substitute ' + (idx + 1) + ' note'">
+                  <button type="button" class="btn btn-sm btn-danger" @click="subForm.subs.splice(idx, 1)"
+                          :aria-label="'Remove substitute ' + (idx + 1)">&times;</button>
+                </div>
+              </template>
+              <div><button type="button" class="btn btn-sm" @click="subForm.subs.push({ article_ref: '', description: '', note: '' })">Add a substitute</button></div>
+            </div>
+            <div class="field">
+              <label class="label">Note</label>
+              <input class="input" x-model.trim="subForm.note" placeholder="Anything to know before swapping, e.g. check the colour">
+            </div>
+            <label class="row" style="gap:.5rem;cursor:pointer">
+              <input type="checkbox" x-model="subForm.both">
+              <span>Works both ways &mdash; also record this article as a substitute for each of the above</span>
+            </label>
+            <datalist id="sub-articles">
+              <template x-for="a in articleList" :key="a.article_ref">
+                <option :value="a.article_ref" x-text="a.description"></option>
+              </template>
+            </datalist>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn btn-danger" x-show="subForm.id" @click="removeSub()" style="margin-right:auto">Delete</button>
+            <button type="button" class="btn" @click="subOpen=false">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="saving">
+              <span x-show="saving" class="spinner"></span><span>Save</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </template>
+
+  <!-- ===================== PICK A SUBSTITUTE MODAL ===================== -->
+  <template x-if="pick.open">
+    <div class="backdrop" @click.self="pick.open=false" @keydown.escape.window="pick.open=false">
+      <div class="modal" style="max-width:760px">
+        <div class="modal-head">
+          <h3 x-text="'Substitute for ' + pick.article"></h3>
+          <button class="btn btn-sm btn-ghost" @click="pick.open=false">Close</button>
+        </div>
+        <div class="modal-body">
+          <p class="muted" style="margin:0">
+            <span x-text="pick.description"></span>
+            <span class="faint" x-text="'\u2014 ' + fmt(pick.required) + ' needed, drawn from ' + (key(pick.holding) === 'stock' ? 'main stock' : pick.holding) + '.'"></span>
+          </p>
+
+          <div>
+            <h4 class="label" style="margin-bottom:.4rem">Recorded substitutes</h4>
+            <template x-if="pick.open && !pickRecorded.length">
+              <p class="hint" style="margin:0">None recorded for this article yet. Search the stock list below.</p>
+            </template>
+            <template x-for="c in pickRecorded" :key="c.article_ref">
+              <div class="pick-row">
+                <div class="grow">
+                  <span class="mono" style="color:var(--accent);font-weight:700" x-text="c.article_ref"></span>
+                  <span x-text="c.description"></span>
+                  <div class="faint" style="font-size:.75rem" x-show="c.note" x-text="c.note"></div>
+                </div>
+                <span class="pill" :class="c.available >= pick.required ? 'pill-good' : (c.available > 0 ? 'pill-warn' : 'pill-mute')"
+                      x-text="fmt(c.available) + ' available'"></span>
+                <button class="btn btn-sm btn-primary" @click="applySubstitute(c.article_ref)">Use this</button>
+              </div>
+            </template>
+          </div>
+
+          <div>
+            <h4 class="label" style="margin-bottom:.4rem">Or choose any article</h4>
+            <input class="input" x-model.trim="pick.search" placeholder="Search by code or description" aria-label="Search the stock list">
+            <template x-for="c in pickSearchResults" :key="c.article_ref">
+              <div class="pick-row">
+                <div class="grow">
+                  <span class="mono" style="color:var(--accent);font-weight:700" x-text="c.article_ref"></span>
+                  <span x-text="c.description"></span>
+                </div>
+                <span class="pill" :class="c.available >= pick.required ? 'pill-good' : (c.available > 0 ? 'pill-warn' : 'pill-mute')"
+                      x-text="fmt(c.available) + ' available'"></span>
+                <button class="btn btn-sm" @click="applySubstitute(c.article_ref)">Use this</button>
+              </div>
+            </template>
+            <p class="hint" x-show="pick.open && pick.search && !pickSearchResults.length" style="margin:.4rem 0 0">Nothing on the stock list matches.</p>
+          </div>
+
+          <label class="row" style="gap:.5rem;cursor:pointer">
+            <input type="checkbox" x-model="pick.save">
+            <span>Save the one I choose to the substitutes register, so it is offered next time</span>
+          </label>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn" x-show="pick.current" @click="applySubstitute('')" style="margin-right:auto">Stop substituting</button>
+          <button type="button" class="btn" @click="pick.open=false">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ===================== WHERE IS IT HELD MODAL ===================== -->
+  <template x-if="where.open">
+    <div class="backdrop" @click.self="where.open=false" @keydown.escape.window="where.open=false">
+      <div class="modal" style="max-width:820px">
+        <div class="modal-head">
+          <h3 x-text="'Where ' + where.article + ' is held'"></h3>
+          <button class="btn btn-sm btn-ghost" @click="where.open=false">Close</button>
+        </div>
+        <div class="modal-body">
+          <p class="muted" style="margin:0" x-text="articleDesc(where.article)"></p>
+          <template x-if="where.open && !whereRows.length">
+            <p class="hint">This article is not on the stock list at all.</p>
+          </template>
+          <template x-if="where.open && whereRows.length">
+            <div class="table-wrap">
+              <table>
+                <thead><tr>
+                  <th>Held for</th><th>Job</th><th>System</th>
+                  <th class="right">Balance</th><th class="right">On order</th><th class="right col-actions"></th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="i in whereRows" :key="i.id">
+                    <tr>
+                      <td x-text="key(holdingOf(i)) === 'stock' ? 'Main stock' : holdingOf(i)"></td>
+                      <td>
+                        <template x-if="key(holdingOf(i)) !== 'stock' && villaProject(holdingOf(i))">
+                          <span>
+                            <span x-text="villaProject(holdingOf(i)).project_code"></span>
+                            <span class="pill" :class="villaStatus(holdingOf(i)) === 'complete' ? 'pill-good' : 'pill-info'"
+                                  x-text="villaStatus(holdingOf(i))"></span>
+                          </span>
+                        </template>
+                        <span class="faint" x-show="key(holdingOf(i)) !== 'stock' && !villaProject(holdingOf(i))">no matching job</span>
+                      </td>
+                      <td class="muted" x-text="i.system_ref || '—'"></td>
+                      <td class="right num" :style="balanceOf(i) < 0 ? 'color:var(--bad);font-weight:700' : 'font-weight:700'"
+                          x-text="fmt(balanceOf(i))"></td>
+                      <td class="right num muted" x-text="onOrder(i) ? fmt(onOrder(i)) : '—'"></td>
+                      <td class="right col-actions">
+                        <button class="btn btn-sm" x-show="key(holdingOf(i)) !== 'stock' && balanceOf(i) > 0"
+                                @click="whereMoveToStock(i)">Move to main stock</button>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </template>
+          <template x-if="where.open && subsFor(where.article).length">
+            <p class="hint" style="margin:0"
+               x-text="'Recorded substitutes: ' + subsFor(where.article).map(x => x.article_ref + ' (' + fmt(mainStockOf(x.article_ref)) + ' in main stock)').join(', ')"></p>
+          </template>
+          <p class="hint" style="margin:0">Material held for a job belongs to that job. Move it to main stock only once you are sure that job will not need it.</p>
+        </div>
       </div>
     </div>
   </template>
@@ -3116,6 +3582,20 @@ function parseDeliveryNote(lines) {
     }
   }
 
+  /* "Customer account / Customer Ref." is followed by e.g.
+     "C0085 / PO 22266-Eurolux Stock quantity for Villas", sometimes wrapping
+     onto the next line. It often names the job the delivery is for. */
+  let custRef = "";
+  for (let i = 0; i < Math.min(lines.length, 60); i++) {
+    const m = lines[i].match(/\bC\d{3,6}\s*\/\s*(.+)$/);
+    if (m) {
+      custRef = m[1].trim();
+      const next = String(lines[i + 1] || "").trim();
+      if (next && /^-\s*\S/.test(next) && !/delivery terms/i.test(next)) custRef += " " + next;
+      break;
+    }
+  }
+
   const ROW = /^(\d+\.\d{2})\s+(\d{5,9})\s+(.*)$/;
   const items = [];
   let cur = null;
@@ -3147,7 +3627,7 @@ function parseDeliveryNote(lines) {
     if (me && !cur.metres) cur.metres = num(String(me[1]).replace(/,/g, ""));
   }
   flush();
-  return { ref, dated, items };
+  return { ref, dated, custRef, items };
 }
 
 function parseMto(aoa) {
@@ -3362,7 +3842,11 @@ document.addEventListener("alpine:init", () => {
     itemOpen: false, itemForm: {},
     moveOpen: false, moveForm: {},
     xferOpen: false, xferForm: {}, xferSystemNew: false,
-    projectOpen: false, projectForm: {},
+    leftoverVilla: "ALL", leftoverDoneOnly: false, leftoverSel: {}, wipeBoms: false,
+    substitutes: [], subOpen: false, subForm: { subs: [] },
+    pick: { open: false, ctx: "", article: "", description: "", required: 0, holding: "Stock", search: "", save: true, current: "", line: null },
+    where: { open: false, article: "" },
+    projectOpen: false, projectForm: {}, projectHoldings: [],
     bomOpen: false, bomForm: { lines: [] }, bomSeedSystem: "",
     /* A spreadsheet read into the BOM dialog, held back until the quantities
        have been divided by however many units the file covers. */
@@ -3380,13 +3864,14 @@ document.addEventListener("alpine:init", () => {
     mto: { fileName: "", project: "", dated: "", lines: [], system: "", systemGuessed: false,
            holding: "Stock", projectId: "", note: "", tag: "" },
     mtoBusy: false, mtoPosting: false, mtoSearch: "",
-    dn: { fileName: "", ref: "", dated: "", lines: [], holding: "Stock", note: "", tag: "" },
+    dn: { fileName: "", ref: "", dated: "", custRef: "", lines: [], system: "__auto", note: "", tag: "" },
+    dnPendingJob: null,
     dnBusy: false, dnPosting: false, dnSavePacks: true,
     bookOpen: false, bookNewProject: false, bookSearch: "",
     book: { projectId: "", newProject: "", system: "", holding: "Stock", note: "", picked: {} },
     levelsOpen: false, levelsForm: { system: "", value: 0, onlyBlank: true },
 
-    wizard: { bomId: "", units: 1, projectId: "" },
+    wizard: { bomId: "", units: 1, projectId: "", subs: {} },
 
     tabs: [
       { id: "dashboard", label: "Main Dashboard",
@@ -3405,6 +3890,10 @@ document.addEventListener("alpine:init", () => {
         icon: '<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6"/><path d="M9.5 14.5L12 17l2.5-2.5"/>' },
       { id: "reports", label: "Reports",
         icon: '<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/>' },
+      { id: "subs", label: "Substitutes",
+        icon: '<path d="M7 7h11l-3-3"/><path d="M17 17H6l3 3"/><circle cx="5" cy="7" r="1.6"/><circle cx="19" cy="17" r="1.6"/>' },
+      { id: "leftovers", label: "Villa Leftovers",
+        icon: '<path d="M3 9l9-5 9 5v9l-9 5-9-5z"/><path d="M15 13H9"/><path d="M11 11l-2 2 2 2"/>' },
       { id: "settings", label: "Settings",
         icon: '<circle cx="12" cy="12" r="3"/><path d="M20 12a8 8 0 00-.14-1.5l2-1.5-2-3.46-2.35.9a8 8 0 00-2.6-1.5L14.5 2h-4l-.4 2.94a8 8 0 00-2.6 1.5l-2.36-.9-2 3.46 2 1.5a8 8 0 000 3l-2 1.5 2 3.46 2.35-.9a8 8 0 002.6 1.5l.41 2.94h4l.4-2.94a8 8 0 002.6-1.5l2.36.9 2-3.46-2-1.5c.1-.49.14-1 .14-1.5z"/>' },
     ],
@@ -3629,6 +4118,22 @@ document.addEventListener("alpine:init", () => {
        makes the page crawl on a phone, so show a page at a time and let the
        search box and the type filter do the narrowing. */
     get visibleMovements() { return this.filteredMovements.slice(0, this.ledgerShown); },
+    /* Every row the type filter and search let through, not only the page shown. */
+    exportLedger() {
+      const iso = (ts) => {
+        if (!ts) return "";
+        const d = ts.toDate ? ts.toDate() : new Date(ts);
+        return Number.isNaN(d.getTime()) ? "" : d.toISOString().replace("T", " ").slice(0, 19);
+      };
+      const rows = [["when_utc", "type", "direction", "article_ref", "description", "system_ref", "holding",
+                     "qty", "project_code", "note", "by"]];
+      for (const m of this.filteredMovements) {
+        rows.push([iso(m.at), m.type || "", m.direction || "", m.article_ref || "", m.description || "",
+                   m.system_ref || "", this.displayHolding(m.holding), num(m.qty), m.project_code || "", m.note || "",
+                   m.by_name || ""]);
+      }
+      downloadCsv(rows, "eurolux-ledger-" + new Date().toISOString().slice(0, 10) + ".csv");
+    },
 
     /* The dropdown's options. Always includes whatever the record already
        carries, so editing an old BOM cannot silently blank its system. */
@@ -3771,14 +4276,134 @@ document.addEventListener("alpine:init", () => {
     },
 
     /* ---- delivery note --------------------------------------------------- */
+    /* Every line of a note has its own destination: a holding ("Stock" for
+       main stock, or the holding of a job) and a system. "Send every line to"
+       and "System" at the top set all lines at once; the table changes one. */
     clearDn() {
-      this.dn = { fileName: "", ref: "", dated: "", lines: [], holding: "Stock", note: "", tag: "" };
+      this.dn = { fileName: "", ref: "", dated: "", custRef: "", lines: [], system: "__auto", note: "", tag: "" };
       this.dnSavePacks = true;
+      this.dnPendingJob = null;
+    },
+    /* The holding a job's material lives under. A job that already has
+       material keeps using that holding name; a new job uses its own name. */
+    dnHoldingForProject(p) {
+      if (!p) return "";
+      if (p.holding) return p.holding;
+      const exact = this.leftoverVillas.find((h) => key(h) === key(p.project_code));
+      return exact || p.project_code;
+    },
+    /* The villa holding most likely to belong to a job, by name, for the
+       "held as" box when a job has not been linked yet. */
+    suggestHolding(p) {
+      if (!p) return "";
+      const exact = this.leftoverVillas.find((h) => key(h) === key(p.project_code));
+      if (exact) return exact;
+      const counts = new Map();
+      for (const i of this.inventory) {
+        const h = this.holdingOf(i);
+        if (key(h) === "stock") continue;
+        const vp = this.villaProject(h);
+        if (vp && vp.id === p.id) counts.set(h, (counts.get(h) || 0) + 1);
+      }
+      let best = "", n = 0;
+      for (const [h, c] of counts) if (c > n) { best = h; n = c; }
+      return best;
+    },
+    get dnDestinations() {
+      const out = [{ value: "Stock", label: "Main stock", short: "Main stock" }];
+      const used = new Set(["stock"]);
+      const jobs = this.projects.slice().sort((a, b) =>
+        String(a.project_code).localeCompare(String(b.project_code), undefined, { numeric: true }));
+      for (const p of jobs) {
+        const h = this.dnHoldingForProject(p);
+        if (!h || used.has(key(h))) continue;
+        used.add(key(h));
+        out.push({ value: h, project: p,
+          label: "Job: " + p.project_code + (key(h) !== key(p.project_code) ? "  (held as " + h + ")" : ""),
+          short: p.project_code });
+      }
+      for (const h of this.leftoverVillas) {
+        if (used.has(key(h))) continue;
+        used.add(key(h));
+        out.push({ value: h, label: "Held for: " + h, short: h });
+      }
+      return out;
+    },
+    dnDestLabel(dest) {
+      const d = this.dnDestinations.find((x) => key(x.value) === key(dest));
+      return d ? (d.project ? d.project.project_code : d.short) : dest;
+    },
+    get dnAllDest() {
+      const ds = [...new Set(this.dn.lines.map((l) => l.dest))];
+      return ds.length === 1 ? ds[0] : (ds.length ? "__mixed" : "Stock");
+    },
+    get dnDestSummary() {
+      const m = new Map();
+      for (const l of this.dnActive) {
+        const k = key(l.dest);
+        if (!m.has(k)) m.set(k, { label: key(l.dest) === "stock" ? "main stock" : this.dnDestLabel(l.dest), lines: 0 });
+        m.get(k).lines++;
+      }
+      return [...m.values()];
+    },
+    /* A job named in the note's customer reference, if any. */
+    get dnRefJob() {
+      if (!this.dn.custRef) return null;
+      return this.villaProject(this.dn.custRef);
+    },
+    /* Any existing line of the article, to copy unit, pack size and bar length from. */
+    dnTemplate(article) {
+      const all = this.inventory.filter((i) => key(i.article_ref) === key(article));
+      return all.find((i) => key(this.holdingOf(i)) === "stock") || all[0] || null;
+    },
+    /* The system a line should go under in a given holding, when nobody chose one. */
+    dnDefaultSystem(article, dest) {
+      if (this.dn.system && this.dn.system !== "__auto") return this.dn.system;
+      const all = this.inventory.filter((i) => key(i.article_ref) === key(article));
+      const pick = (rows) => rows.slice().sort((a, b) => num(b.received_qty) - num(a.received_qty))[0];
+      const inDest = all.filter((i) => key(this.holdingOf(i)) === key(dest));
+      const inStock = all.filter((i) => key(this.holdingOf(i)) === "stock");
+      const hit = pick(inDest) || pick(inStock) || pick(all);
+      return (hit && hit.system_ref) || "";
+    },
+    dnSystemsFor(line) {
+      const own = [...new Set(this.inventory
+        .filter((i) => key(i.article_ref) === key(line.art)).map((i) => i.system_ref).filter(Boolean))];
+      const list = [...own];
+      for (const sys of this.systemOptions) if (!list.some((x) => key(x) === key(sys))) list.push(sys);
+      if (line.sys && !list.some((x) => key(x) === key(line.sys))) list.unshift(line.sys);
+      return list;
+    },
+    dnApplyDest(value) {
+      if (value === "__newjob") { this.dnPendingJob = { scope: "all" }; this.openProject(null, ""); return; }
+      if (value === "__mixed") return;
+      for (const l of this.dn.lines) { l.dest = value; l.sys = this.dnDefaultSystem(l.art, value); }
+    },
+    dnApplySystem(value) {
+      this.dn.system = value;
+      for (const l of this.dn.lines) l.sys = this.dnDefaultSystem(l.art, l.dest);
+    },
+    dnSetLineDest(line, value) {
+      if (value === "__newjob") { this.dnPendingJob = { scope: "line", line }; this.openProject(null, ""); return; }
+      line.dest = value;
+      line.sys = this.dnDefaultSystem(line.art, value);
+    },
+    /* Called once a job created from this page is saved. */
+    dnJobCreated(projectCode) {
+      const pend = this.dnPendingJob;
+      this.dnPendingJob = null;
+      if (!pend) return;
+      if (pend.scope === "all") this.dnApplyDest(projectCode);
+      else if (pend.line) this.dnSetLineDest(pend.line, projectCode);
+    },
+    /* The stock line a delivery line lands on, if it exists already. */
+    dnTarget(line) {
+      const k = stockKey(line.art, line.sys, line.dest || "Stock");
+      return this.inventory.find((i) => stockKey(i.article_ref, i.system_ref, this.holdingOf(i)) === k) || null;
     },
     dnItem(article) {
-      return this.inventory.find((i) =>
-        key(i.article_ref) === key(article) &&
-        key(this.holdingOf(i)) === key(this.dn.holding)) || null;
+      const l = this.dn.lines.find((x) => key(x.art) === key(article));
+      return l ? this.dnTarget(l) : null;
     },
     /* A packed line delivers qty x pack size; a loose line delivers qty. */
     dnUnits(line) {
@@ -3787,12 +4412,12 @@ document.addEventListener("alpine:init", () => {
     },
     get dnActive() { return this.dn.lines.filter((l) => this.dnUnits(l) > 0); },
     get dnTotalUnits() { return this.dnActive.reduce((a, l) => a + this.dnUnits(l), 0); },
-    get dnMissing() { return this.dnActive.filter((l) => !this.dnItem(l.art)); },
+    get dnMissing() { return this.dnActive.filter((l) => !this.dnTarget(l)); },
     /* Lines whose pack size differs from what the article already carries. */
     get dnPackChanges() {
       return this.dnActive.filter((l) => {
         if (!(num(l.pu) > 1)) return false;
-        const item = this.dnItem(l.art);
+        const item = this.dnTarget(l) || this.dnTemplate(l.art);
         return !item || this.puQty(item) !== num(l.pu);
       });
     },
@@ -3812,10 +4437,12 @@ document.addEventListener("alpine:init", () => {
           return;
         }
         this.dn = {
-          fileName: file.name, ref: parsed.ref, dated: parsed.dated,
-          lines: parsed.items, holding: "Stock", note: "",
+          fileName: file.name, ref: parsed.ref, dated: parsed.dated, custRef: parsed.custRef || "",
+          lines: parsed.items.map((l) => ({ ...l, dest: "Stock", sys: "" })), system: "__auto", note: "",
           tag: "DN:" + (parsed.ref || file.name),
         };
+        this.dnPendingJob = null;
+        for (const l of this.dn.lines) l.sys = this.dnDefaultSystem(l.art, "Stock");
         if (this.dn.tag && this.importsDone[this.dn.tag]) {
           this.toast('"' + (parsed.ref || file.name) + '" was already received on ' +
                      String(this.importsDone[this.dn.tag]).slice(0, 10) +
@@ -3839,77 +4466,81 @@ document.addEventListener("alpine:init", () => {
                    ".\n\nPosting it again books every quantity in a second time.\n\nPost anyway?")) return;
 
       const missing = this.dnMissing;
-      if (!confirm("Receive " + lines.length + " line(s), " + this.fmt(this.dnTotalUnits) +
-                   " units, into " + (this.dn.holding === "Stock" ? "main stock" : this.dn.holding) + "?" +
-                   (missing.length ? "\n\n" + missing.length + " new article(s) will be created." : "") +
+      const summary = this.dnDestSummary.map((d) => "\u2022 " + d.lines + " line(s) to " + d.label).join("\n");
+      if (!confirm("Receive " + lines.length + " line(s), " + this.fmt(this.dnTotalUnits) + " units?\n\n" +
+                   summary +
+                   (missing.length ? "\n\n" + missing.length + " new stock line(s) will be created." : "") +
                    "\n\nThis posts to the ledger and cannot be undone from inside the app.")) return;
 
       this.dnPosting = true;
       try {
-        const created = new Map();
+        /* Fold lines that land on the same stock line (an article appearing on
+           two lines of the note, sent to the same place), and create the stock
+           lines that do not exist yet. */
+        const groups = new Map();
+        for (const l of lines) {
+          const k = stockKey(l.art, l.sys, l.dest || "Stock");
+          if (!groups.has(k)) groups.set(k, { line: l, item: this.dnTarget(l), qty: 0, pu: 0 });
+          const g = groups.get(k);
+          g.qty += this.dnUnits(l);
+          if (num(l.pu) > 1) g.pu = num(l.pu);
+        }
+
         const first = writeBatch(db);
-        for (const l of missing) {
+        let made = 0;
+        for (const g of groups.values()) {
+          if (g.item) { g.id = g.item.id; continue; }
+          const l = g.line, t = this.dnTemplate(l.art);
           const ref = doc(collection(db, collections.inventory));
+          g.id = ref.id; made++;
           first.set(ref, {
-            article_ref: l.art, description: l.desc || l.art,
-            system_ref: "", holding: this.dn.holding,
-            unit: l.barLen ? "BAR" : "NO",
-            pu_qty: num(l.pu) > 1 ? num(l.pu) : 1,
-            pack_unit: l.packName || "PKT",
+            article_ref: l.art, description: (t && t.description) || l.desc || l.art,
+            system_ref: l.sys || "", holding: l.dest || "Stock",
+            unit: (t && t.unit) || (l.barLen ? "BAR" : "NO"),
+            pu_qty: num(l.pu) > 1 ? num(l.pu) : ((t && this.puQty(t)) || 1),
+            pack_unit: l.packName || (t && t.pack_unit) || "PKT",
             /* The voucher prints "Size: 6000 mm" against a profile, which is
                the bar length, so a new article arrives already knowing it. */
-            bar_length: barMm(l.barLen), on_order: 0,
+            bar_length: barMm(l.barLen) || (t && this.barLength(t)) || 0, on_order: 0,
             location: "", min_qty: 0,
             received_qty: 0, issued_qty: 0, balance_stock_qty: 0,
             createdAt: serverTimestamp(), createdBy: this.displayName,
             updatedAt: serverTimestamp(), updatedBy: this.displayName,
           });
-          created.set(key(l.art), ref.id);
         }
-        if (created.size) this.track(first.commit(), "the new articles");
+        if (made) this.track(first.commit(), "the new stock lines");
 
-        const note = ["DN " + (this.dn.ref || this.dn.fileName), this.dn.note]
-          .filter(Boolean).join(" — ");
-
-        /* One article can appear on two lines of the same note, so fold them
-           together before touching the balance. */
-        const delta = new Map();
-        for (const l of lines) {
-          const item = this.dnItem(l.art);
-          const id = item ? item.id : created.get(key(l.art));
-          if (!id) continue;
-          const d = delta.get(id) || { qty: 0, line: l, item };
-          d.qty += this.dnUnits(l);
-          if (num(l.pu) > 1) d.pu = num(l.pu);
-          delta.set(id, d);
-        }
-
-        const entries = [...delta.entries()];
+        const baseNote = ["DN " + (this.dn.ref || this.dn.fileName), this.dn.note].filter(Boolean).join(" \u2014 ");
+        const entries = [...groups.values()];
         for (let i = 0; i < entries.length; i += 150) {
           const batch = writeBatch(db);
-          for (const [id, d] of entries.slice(i, i + 150)) {
+          for (const g of entries.slice(i, i + 150)) {
+            const l = g.line, dest = l.dest || "Stock";
+            const job = key(dest) === "stock" ? null
+              : (this.projects.find((p) => key(p.project_code) === key(dest)) || this.villaProject(dest));
             const fields = {
-              received_qty: increment(d.qty),
-              balance_stock_qty: increment(d.qty),
+              received_qty: increment(g.qty),
+              balance_stock_qty: increment(g.qty),
               /* The delivery pays down the order book by what actually turned
                  up, so a short delivery leaves the balance of it outstanding. */
-              on_order: increment(-Math.min(d.qty, this.onOrder(d.item))),
+              on_order: increment(-Math.min(g.qty, g.item ? this.onOrder(g.item) : 0)),
               updatedAt: serverTimestamp(), updatedBy: this.displayName,
             };
             /* The note states the pack size, so it is the better record. */
-            if (this.dnSavePacks && d.pu > 1) {
-              fields.pu_qty = d.pu;
-              if (d.line.packName) fields.pack_unit = d.line.packName;
+            if (this.dnSavePacks && g.pu > 1) {
+              fields.pu_qty = g.pu;
+              if (l.packName) fields.pack_unit = l.packName;
             }
-            batch.update(doc(db, collections.inventory, id), fields);
+            batch.update(doc(db, collections.inventory, g.id), fields);
             batch.set(doc(collection(db, collections.movements)), {
-              item_id: id, article_ref: d.line.art,
-              description: (d.item && d.item.description) || d.line.desc || "",
-              system_ref: (d.item && d.item.system_ref) || "",
-              holding: this.dn.holding,
-              type: "receive", qty: d.qty,
-              project_id: "", project_code: "",
-              note, at: serverTimestamp(),
+              item_id: g.id, article_ref: l.art,
+              description: (g.item && g.item.description) || l.desc || "",
+              system_ref: l.sys || "",
+              holding: dest,
+              type: "receive", qty: g.qty,
+              project_id: job ? job.id : "", project_code: job ? job.project_code : "",
+              note: baseNote + (job ? " \u2014 for " + job.project_code : ""),
+              at: serverTimestamp(),
               by: this.authUser.uid, by_name: this.displayName,
             });
           }
@@ -3921,11 +4552,11 @@ document.addEventListener("alpine:init", () => {
             { [this.dn.tag]: new Date().toISOString() }, { merge: true }), "the import record");
         }
 
-        const n = entries.length, made = created.size, units = this.dnTotalUnits;
-        this.clearDn();
-        this.toast(this.savedMsg("Delivery received — " + this.fmt(units) + " units across " +
-                   n + " article(s)" + (made ? ", " + made + " created" : "") + "."), "ok");
+        const n = entries.length, units = this.dnTotalUnits;
+        this.toast(this.savedMsg("Delivery received \u2014 " + this.fmt(units) + " units across " +
+                   n + " stock line(s)" + (made ? ", " + made + " created" : "") + "."), "ok");
         this.go("inventory");
+        setTimeout(() => this.clearDn(), 300);
       } catch (e) {
         this.toast("Could not post the delivery: " + e.message, "err");
       } finally { this.dnPosting = false; }
@@ -3943,12 +4574,14 @@ document.addEventListener("alpine:init", () => {
         key(i.article_ref) === key(article) &&
         key(this.holdingOf(i)) === key(this.mto.holding)) || null;
     },
+    /* The article an MTO line actually draws: its substitute, if one was chosen. */
+    mtoArt(line) { return line.sub || line.art; },
     mtoAfter(line) {
-      const item = this.mtoItem(line.art);
+      const item = this.mtoItem(this.mtoArt(line));
       return (item ? this.balanceOf(item) : 0) - num(line.deduct);
     },
     get mtoActive() { return this.mto.lines.filter((l) => num(l.deduct) > 0); },
-    get mtoMissing() { return this.mto.lines.filter((l) => !this.mtoItem(l.art)); },
+    get mtoMissing() { return this.mto.lines.filter((l) => !this.mtoItem(this.mtoArt(l))); },
     get mtoNegative() { return this.mtoActive.filter((l) => this.mtoAfter(l) < 0); },
     get mtoVisible() {
       const q = key(this.mtoSearch);
@@ -4045,9 +4678,11 @@ document.addEventListener("alpine:init", () => {
         // Articles the MTO names that we have never stocked.
         const created = new Map();
         for (const l of missing) {
+          if (created.has(key(this.mtoArt(l)))) continue;
           const ref = doc(collection(db, collections.inventory));
           first.set(ref, {
-            article_ref: l.art, description: l.desc, system_ref: this.mto.system,
+            article_ref: this.mtoArt(l), description: l.sub ? (l.subDesc || this.articleDesc(l.sub) || l.sub) : l.desc,
+            system_ref: this.mto.system,
             holding: this.mto.holding,
             /* The MTO's unit is how the material is MEASURED (metres of profile),
                not how it is STOCKED. Profiles are stocked as bars. */
@@ -4056,7 +4691,7 @@ document.addEventListener("alpine:init", () => {
             createdAt: serverTimestamp(), createdBy: this.displayName,
             updatedAt: serverTimestamp(), updatedBy: this.displayName,
           });
-          created.set(key(l.art), ref.id);
+          created.set(key(this.mtoArt(l)), ref.id);
         }
         if (created.size) this.track(first.commit(), "the new articles");
 
@@ -4066,8 +4701,9 @@ document.addEventListener("alpine:init", () => {
         for (let i = 0; i < lines.length; i += 200) {
           const batch = writeBatch(db);
           for (const l of lines.slice(i, i + 200)) {
-            const item = this.mtoItem(l.art);
-            const id = item ? item.id : created.get(key(l.art));
+            const art = this.mtoArt(l);
+            const item = this.mtoItem(art);
+            const id = item ? item.id : created.get(key(art));
             if (!id) continue;
             const qty = num(l.deduct);
             batch.update(doc(db, collections.inventory, id), {
@@ -4075,12 +4711,13 @@ document.addEventListener("alpine:init", () => {
               updatedAt: serverTimestamp(), updatedBy: this.displayName,
             });
             batch.set(doc(collection(db, collections.movements)), {
-              item_id: id, article_ref: l.art, description: l.desc,
+              item_id: id, article_ref: art,
+              description: (item && item.description) || (l.sub ? (l.subDesc || l.sub) : l.desc),
               system_ref: (item && item.system_ref) || this.mto.system,
               holding: this.mto.holding,
               type: "issue", qty,
               project_id: projectId, project_code: projectCode,
-              note, at: serverTimestamp(),
+              note: note + (l.sub ? " (substitute for " + l.art + ")" : ""), at: serverTimestamp(),
               by: this.authUser.uid, by_name: this.displayName,
             });
           }
@@ -4278,27 +4915,71 @@ document.addEventListener("alpine:init", () => {
       return this.online ? "pill-good" : "pill-mute";
     },
     get selectedBom() { return this.boms.find((b) => b.id === this.wizard.bomId) || null; },
+    /* A bundle is always drawn from MAIN STOCK ("Stock" holding). Material
+       held for another villa is not available to this job, so it is never
+       used. Within main stock the BOM's own system is used first; if that is
+       not enough, main stock filed under a DIFFERENT system is used next and
+       the line is flagged, so the user is asked before it is booked. Whatever
+       still cannot be covered is the shortfall, and it is posted against the
+       BOM-system line (so that line goes negative, not some other job's). */
     get wizardLines() {
       const bom = this.selectedBom;
       if (!bom) return [];
       const units = Math.max(0, num(this.wizard.units));
+      const bomSys = squash(bom.system_ref);
       return (bom.lines || []).map((l) => {
-        const item = this.inventory.find((i) => key(i.article_ref) === key(l.article_ref));
         const required = num(l.qty_per) * units;
-        const on_hand = item ? this.balanceOf(item) : 0;
+        /* A substitute chosen for this line is looked up instead of the original. */
+        const subArt = this.wizard.subs[bom.id + "|" + key(l.article_ref)] || "";
+        const art = subArt || l.article_ref;
+        const all = this.inventory.filter((i) => key(i.article_ref) === key(art));
+        const stock = all.filter((i) => key(this.holdingOf(i)) === "stock");
+        // No BOM system set: every main-stock line counts as a match.
+        const isSame = (i) => !bomSys || squash(i.system_ref) === bomSys;
+        const byBal = (a, b) => this.balanceOf(b) - this.balanceOf(a);
+        const same = stock.filter(isSame).sort(byBal);
+        const other = stock.filter((i) => !isSame(i)).sort(byBal);
+
+        const sources = [];
+        let remaining = required;
+        for (const i of [...same, ...other]) {
+          if (remaining <= 0) break;
+          const take = Math.min(remaining, Math.max(0, this.balanceOf(i)));
+          if (take <= 0) continue;
+          sources.push({ item_id: i.id, system_ref: i.system_ref || "", qty: take, other: !isSame(i) });
+          remaining -= take;
+        }
+        // Where the uncovered part is booked: the BOM-system line if there is one.
+        const primary = same[0] || other[0] || null;
+        if (remaining > 0 && primary) {
+          const s = sources.find((x) => x.item_id === primary.id);
+          if (s) s.qty += remaining;
+          else sources.push({ item_id: primary.id, system_ref: primary.system_ref || "",
+                              qty: remaining, other: !isSame(primary) });
+        }
+
+        const fromOther = sources.filter((s) => s.other);
+        const ref = primary || all[0] || null;
         return {
-          article_ref: l.article_ref,
-          description: (item && item.description) || l.description || "—",
-          system_ref: (item && item.system_ref) || bom.system_ref || "",
+          article_ref: art, bom_ref: l.article_ref, sub: !!subArt,
+          description: (ref && ref.description) || (subArt ? this.articleDesc(subArt) : l.description) || "—",
+          system_ref: (primary && primary.system_ref) || bom.system_ref || "",
           qty_per: num(l.qty_per),
-          required, on_hand,
-          short: Math.max(0, required - on_hand),
-          known: !!item,
-          item_id: item ? item.id : null,
+          required,
+          on_hand: same.reduce((t, i) => t + this.balanceOf(i), 0),
+          other_on_hand: other.reduce((t, i) => t + Math.max(0, this.balanceOf(i)), 0),
+          other_qty: fromOther.reduce((t, s) => t + s.qty, 0),
+          other_systems: [...new Set(fromOther.map((s) => s.system_ref || "no system"))],
+          short: Math.max(0, remaining),
+          known: !!primary,
+          // In the list, but only as material held for other jobs.
+          held_elsewhere: !primary && all.length > 0,
+          sources,
         };
       });
     },
     get wizardShortage() { return this.wizardLines.some((l) => l.short > 0 || !l.known); },
+    get wizardOtherSystem() { return this.wizardLines.filter((l) => l.known && l.other_qty > 0); },
 
     /* ---------------- lifecycle ---------------- */
     async initApp() {
@@ -4342,7 +5023,7 @@ document.addEventListener("alpine:init", () => {
     unsubscribeAll() {
       this._unsubs.forEach((fn) => { try { fn(); } catch (e) {} });
       this._unsubs = [];
-      this.inventory = []; this.movements = []; this.projects = []; this.boms = [];
+      this.inventory = []; this.movements = []; this.projects = []; this.boms = []; this.substitutes = [];
     },
 
     subscribe(user) {
@@ -4373,6 +5054,7 @@ document.addEventListener("alpine:init", () => {
       bind("inventory", "inventory", collection(db, collections.inventory));
       bind("projects", "projects", collection(db, collections.projects));
       bind("BOM templates", "boms", collection(db, collections.boms));
+      bind("substitutes", "substitutes", collection(db, collections.substitutes || "substitutes"));
       /* The whole ledger, newest first. Villa Project totals are summed from
          these rows, so a window would silently under-report every project.
          Firestore keeps its own local copy, so this is one download, not one
@@ -4474,11 +5156,12 @@ document.addEventListener("alpine:init", () => {
        something on every page. Views that can show results filter themselves;
        from anywhere else, typing takes you to the stock list. */
     get searchableTab() {
-      return ["inventory", "movements", "reports", "projects"].includes(this.currentTab);
+      return ["inventory", "movements", "reports", "projects", "leftovers", "subs"].includes(this.currentTab);
     },
     get searchPlaceholder() {
       const where = { inventory: "the stock list", movements: "the ledger",
-                      reports: "this report", projects: "jobs and booked items" };
+                      reports: "this report", projects: "jobs and booked items",
+                      leftovers: "villa leftovers", subs: "substitutes by code or description" };
       return this.searchableTab
         ? "Search " + where[this.currentTab] + "\u2026"
         : "Search article code, description or system\u2026";
@@ -4494,7 +5177,7 @@ document.addEventListener("alpine:init", () => {
     fmt(v) { return nf.format(num(v)); },
     /* Alpine evaluates markup against the component, so a helper used in a
        template has to live on it \u2014 a module-scope function is invisible there. */
-    num,
+    num, key,
     squashRef: squash,
     balanceOf(item) { return num(item.received_qty) - num(item.issued_qty); },
     reorderLevel(item) {
@@ -4637,12 +5320,14 @@ document.addEventListener("alpine:init", () => {
        trusting. */
     async wipeData() {
       if (this.saving) return;
-      const n = this.inventory.length + this.projects.length + this.boms.length;
+      const boms = this.wipeBoms ? this.boms : [];
+      const n = this.inventory.length + this.projects.length + boms.length;
       if (!n) return;
       if (!confirm("Delete " + this.fmt(this.inventory.length) + " article(s), " +
-                   this.fmt(this.projects.length) + " job(s) and " +
-                   this.fmt(this.boms.length) + " BOM template(s)?\n\n" +
-                   "The movement ledger is kept. This cannot be undone.")) return;
+                   this.fmt(this.projects.length) + " job(s)" +
+                   (boms.length ? " and " + this.fmt(boms.length) + " BOM template(s)" : "") + "?\n\n" +
+                   (this.wipeBoms ? "" : "BOM templates are kept. ") +
+                   "The movement ledger and the substitutes register are kept. This cannot be undone.")) return;
       const typed = prompt('Type DELETE to confirm.');
       if (String(typed || "").trim().toUpperCase() !== "DELETE") {
         this.toast("Nothing was deleted.", "ok"); return;
@@ -4653,7 +5338,7 @@ document.addEventListener("alpine:init", () => {
         const jobs = [
           [collections.inventory, this.inventory],
           [collections.projects, this.projects],
-          [collections.boms, this.boms],
+          [collections.boms, boms],
         ];
         let gone = 0;
         for (const [coll, list] of jobs) {
@@ -4666,6 +5351,8 @@ document.addEventListener("alpine:init", () => {
             this.track(batch.commit(), "the deletion");
           }
         }
+        /* Forget which files went in, so the same import files can be loaded again. */
+        this.track(setDoc(doc(db, collections.settings, "imports"), {}), "the import record");
         this.selectedHolding = "Stock";
         this.selectedCategory = "ALL SYSTEMS";
         this.toast(this.savedMsg("Deleted " + gone + " record(s). Import your stock list next."), "ok");
@@ -5024,11 +5711,370 @@ document.addEventListener("alpine:init", () => {
       } finally { this.saving = false; }
     },
 
+    /* ---------------- substitutes -----------------------------------------
+       One record per article: the article, and the articles that can stand
+       in for it. Offered by the BOM Wizard and the MTO import whenever an
+       article is missing or short, and searchable on the Substitutes page. */
+    articleDesc(article) {
+      const i = this.inventory.find((x) => key(x.article_ref) === key(article));
+      if (i) return i.description || "";
+      const r = this.substitutes.find((x) => key(x.article_ref) === key(article));
+      if (r && r.description) return r.description;
+      for (const r2 of this.substitutes) {
+        const x = (r2.subs || []).find((y) => key(y.article_ref) === key(article));
+        if (x && x.description) return x.description;
+      }
+      return "";
+    },
+    /* What main stock holds of an article, every system together. */
+    mainStockOf(article) {
+      return this.inventory
+        .filter((i) => key(i.article_ref) === key(article) && key(this.holdingOf(i)) === "stock")
+        .reduce((t, i) => t + Math.max(0, this.balanceOf(i)), 0);
+    },
+    get articleList() {
+      const m = new Map();
+      for (const i of this.inventory) {
+        const k = key(i.article_ref);
+        if (!m.has(k)) m.set(k, { article_ref: i.article_ref, description: i.description || "" });
+      }
+      return [...m.values()].sort((a, b) =>
+        String(a.article_ref).localeCompare(String(b.article_ref), undefined, { numeric: true }));
+    },
+    subRecord(article) { return this.substitutes.find((r) => key(r.article_ref) === key(article)) || null; },
+    subsFor(article) { const r = this.subRecord(article); return (r && r.subs) || []; },
+    get subRows() {
+      const q = key(this.searchQuery);
+      return this.substitutes
+        .filter((r) => !q || [r.article_ref, r.description, r.note, this.articleDesc(r.article_ref),
+          ...(r.subs || []).flatMap((x) => [x.article_ref, x.description, x.note])]
+          .some((v) => key(v).includes(q)))
+        .sort((a, b) => String(a.article_ref).localeCompare(String(b.article_ref), undefined, { numeric: true }));
+    },
+    openSub(r = null, seed = "") {
+      this.subForm = r
+        ? { id: r.id, article_ref: r.article_ref, description: r.description || "", note: r.note || "",
+            subs: (r.subs || []).map((x) => ({ ...x })), both: false }
+        : { article_ref: seed, description: seed ? this.articleDesc(seed) : "", note: "",
+            subs: [{ article_ref: "", description: "", note: "" }], both: false };
+      if (!this.subForm.subs.length) this.subForm.subs.push({ article_ref: "", description: "", note: "" });
+      this.subOpen = true;
+    },
+    /* Add one substitute to an article's record, creating the record if need be. */
+    subUpsert(batch, article, description, sub) {
+      const coll = collections.substitutes || "substitutes";
+      const rec = this.subRecord(article);
+      const stamp = { updatedAt: serverTimestamp(), updatedBy: this.displayName };
+      if (rec) {
+        if ((rec.subs || []).some((x) => key(x.article_ref) === key(sub.article_ref))) return false;
+        batch.update(doc(db, coll, rec.id), { subs: [...(rec.subs || []), sub], ...stamp });
+      } else {
+        batch.set(doc(collection(db, coll)), {
+          article_ref: article, description: description || this.articleDesc(article) || "",
+          note: "", subs: [sub], createdAt: serverTimestamp(), createdBy: this.displayName, ...stamp,
+        });
+      }
+      return true;
+    },
+    async saveSub() {
+      if (this.saving) return;
+      const f = this.subForm;
+      const art = String(f.article_ref || "").trim();
+      const subs = (f.subs || [])
+        .map((x) => ({ article_ref: String(x.article_ref || "").trim(),
+                       description: String(x.description || "").trim() || this.articleDesc(x.article_ref),
+                       note: String(x.note || "").trim() }))
+        .filter((x) => x.article_ref && key(x.article_ref) !== key(art));
+      if (!art) { this.toast("Enter the article code.", "err"); return; }
+      if (!subs.length) { this.toast("Add at least one substitute.", "err"); return; }
+      const dup = this.substitutes.find((r) => key(r.article_ref) === key(art) && r.id !== f.id);
+      if (dup) { this.toast(art + " already has a record. Edit that one instead.", "err"); return; }
+      this.saving = true;
+      try {
+        const coll = collections.substitutes || "substitutes";
+        const batch = writeBatch(db);
+        const data = { article_ref: art, description: f.description || this.articleDesc(art) || "",
+                       note: f.note || "", subs,
+                       updatedAt: serverTimestamp(), updatedBy: this.displayName };
+        if (f.id) batch.update(doc(db, coll, f.id), data);
+        else batch.set(doc(collection(db, coll)), { ...data, createdAt: serverTimestamp(), createdBy: this.displayName });
+        let rev = 0;
+        if (f.both) {
+          for (const x of subs) {
+            if (this.subUpsert(batch, x.article_ref, x.description,
+                { article_ref: art, description: data.description, note: x.note || "" })) rev++;
+          }
+        }
+        this.track(batch.commit(), "the substitutes");
+        setTimeout(() => { this.subOpen = false; }, 60);
+        this.toast(this.savedMsg("Substitutes for " + art + " saved" +
+                   (rev ? " \u2014 and recorded the other way round for " + rev + " article(s)." : ".")), "ok");
+      } catch (e) {
+        this.toast("Could not save: " + e.message, "err");
+      } finally { this.saving = false; }
+    },
+    async removeSub() {
+      const f = this.subForm;
+      if (!f.id || !confirm("Delete the substitutes recorded for " + f.article_ref + "?")) return;
+      this.track(deleteDoc(doc(db, collections.substitutes || "substitutes", f.id)), "the deletion");
+      this.subOpen = false;
+      this.toast(this.savedMsg("Deleted."), "ok");
+    },
+    exportSubs() {
+      const rows = [["article_ref", "description", "substitute_article_ref", "substitute_description", "substitute_note", "main_stock_now", "substitute_main_stock_now", "note"]];
+      for (const r of this.subRows) {
+        for (const x of (r.subs || [])) {
+          rows.push([r.article_ref, r.description || this.articleDesc(r.article_ref), x.article_ref,
+                     x.description || this.articleDesc(x.article_ref), x.note || "",
+                     this.mainStockOf(r.article_ref), this.mainStockOf(x.article_ref), r.note || ""]);
+        }
+      }
+      downloadCsv(rows, "eurolux-substitutes-" + new Date().toISOString().slice(0, 10) + ".csv");
+    },
+
+    /* ---- choosing a substitute in the BOM Wizard or an MTO ---- */
+    openPick(ctx, line) {
+      if (ctx === "bom") {
+        this.pick = { open: true, ctx, line, article: line.bom_ref, required: line.required,
+          description: (this.selectedBom.lines || []).find((x) => key(x.article_ref) === key(line.bom_ref))?.description
+                       || this.articleDesc(line.bom_ref),
+          holding: "Stock", search: "", current: line.sub ? line.article_ref : "", save: true };
+      } else {
+        this.pick = { open: true, ctx, line, article: line.art, required: num(line.deduct),
+          description: line.desc, holding: this.mto.holding || "Stock", search: "",
+          current: line.sub || "", save: true };
+      }
+    },
+    /* What the place being drawn from holds of an article. */
+    pickAvailable(article) {
+      return this.inventory
+        .filter((i) => key(i.article_ref) === key(article) && key(this.holdingOf(i)) === key(this.pick.holding))
+        .reduce((t, i) => t + Math.max(0, this.balanceOf(i)), 0);
+    },
+    get pickRecorded() {
+      return this.subsFor(this.pick.article).map((x) => ({
+        article_ref: x.article_ref, note: x.note || "",
+        description: x.description || this.articleDesc(x.article_ref),
+        available: this.pickAvailable(x.article_ref),
+      }));
+    },
+    get pickSearchResults() {
+      const q = key(this.pick.search);
+      if (q.length < 2) return [];
+      return this.articleList
+        .filter((a) => key(a.article_ref) !== key(this.pick.article) &&
+                       (key(a.article_ref).includes(q) || key(a.description).includes(q)))
+        .slice(0, 25)
+        .map((a) => ({ ...a, available: this.pickAvailable(a.article_ref) }))
+        .sort((a, b) => b.available - a.available);
+    },
+    applySubstitute(article) {
+      const p = this.pick;
+      if (p.ctx === "bom") {
+        const k = this.selectedBom.id + "|" + key(p.article);
+        if (article) this.wizard.subs[k] = article; else delete this.wizard.subs[k];
+        this.wizard.subs = { ...this.wizard.subs };
+      } else if (p.line) {
+        p.line.sub = article || "";
+        p.line.subDesc = article ? this.articleDesc(article) : "";
+      }
+      if (article && p.save && !this.subsFor(p.article).some((x) => key(x.article_ref) === key(article))) {
+        const batch = writeBatch(db);
+        this.subUpsert(batch, p.article, p.description,
+          { article_ref: article, description: this.articleDesc(article), note: "" });
+        this.track(batch.commit(), "the substitutes register");
+      }
+      /* Close once the lists inside the dialog have caught up with the change;
+         closing in the same tick makes Alpine refresh lists it has just removed. */
+      setTimeout(() => { this.pick.open = false; }, 60);
+      this.toast(article ? article + " will be used instead of " + p.article + "." : "Back to " + p.article + ".", "ok");
+    },
+
+    /* ---- where an article is held ---- */
+    openWhere(article) { this.where = { open: true, article }; },
+    get whereRows() {
+      return this.inventory
+        .filter((i) => key(i.article_ref) === key(this.where.article))
+        .sort((a, b) => (key(this.holdingOf(a)) === "stock" ? 0 : 1) - (key(this.holdingOf(b)) === "stock" ? 0 : 1) ||
+                        this.balanceOf(b) - this.balanceOf(a));
+    },
+    whereMoveToStock(item) {
+      this.where.open = false;
+      this.openTransfer(item);
+      this.xferForm.to_holding = "Stock";
+      this.xferForm.to_system = item.system_ref || "";
+      this.xferForm.qty = this.balanceOf(item);
+      this.xferForm.note = "Not needed for " + this.holdingOf(item);
+    },
+
+    /* ---------------- villa leftovers ------------------------------------
+       Material bought for a villa that was never issued. While the villa is
+       running it stays reserved; once it is finished the leftovers go back to
+       main stock, onto the line for the same article and system. This is the
+       same kind of move as a transfer — received comes off the villa line and
+       goes on to the main-stock line, with a matched pair of ledger entries —
+       so the business's received/issued totals are left alone.
+    -------------------------------------------------------------------- */
+    /* The job a villa holding belongs to. Holdings are named after the villa
+       ("Villa 24, Street 4, Savannah A") and jobs after the job number and
+       name ("1393 - SAVANNAH"), so the job number is dropped and the rest is
+       looked for inside the holding name, ignoring case, spaces and
+       punctuation. Names shorter than four letters ("C35") are only matched
+       exactly, and the longest match wins. */
+    villaProject(holding) {
+      const norm = (v) => String(v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const h = norm(holding);
+      if (!h) return null;
+      /* A job that names its holding outright wins. */
+      const linked = this.projects.find((p) => p.holding && norm(p.holding) === h);
+      if (linked) return linked;
+      let best = null, bestLen = 0;
+      for (const p of this.projects) {
+        const full = norm(p.project_code);
+        const core = norm(String(p.project_code ?? "").replace(/^\s*\d+\s*[-–—]\s*/, ""));
+        let len = 0;
+        if (full && full === h) len = 1e6;
+        else if (core && core === h) len = 1e5;
+        else if (core.length >= 4 && h.includes(core)) len = core.length;
+        else if (h.length >= 4 && core.includes(h)) len = h.length;
+        if (len > bestLen) { best = p; bestLen = len; }
+      }
+      return best;
+    },
+    villaStatus(holding) { const p = this.villaProject(holding); return p ? (p.status || "active") : ""; },
+
+    get leftoverVillas() {
+      return [...new Set(this.inventory.map((i) => this.holdingOf(i)).filter((h) => key(h) !== "stock"))]
+        .sort((a, b) => a.localeCompare(b));
+    },
+    get leftoverRows() {
+      const q = key(this.searchQuery);
+      return this.inventory
+        .filter((i) => key(this.holdingOf(i)) !== "stock" && this.balanceOf(i) > 0)
+        .filter((i) => this.leftoverVilla === "ALL" || this.holdingOf(i) === this.leftoverVilla)
+        .filter((i) => !this.leftoverDoneOnly || this.villaStatus(this.holdingOf(i)) === "complete")
+        .filter((i) => !q || [i.article_ref, i.description, i.system_ref, this.holdingOf(i)]
+          .some((v) => key(v).includes(q)))
+        .sort((a, b) => (this.holdingOf(a) + "|" + (a.system_ref || "") + "|" + a.article_ref)
+          .localeCompare(this.holdingOf(b) + "|" + (b.system_ref || "") + "|" + b.article_ref));
+    },
+    get leftoverGroups() {
+      const map = new Map();
+      for (const i of this.leftoverRows) {
+        const h = this.holdingOf(i);
+        if (!map.has(h)) map.set(h, { holding: h, status: this.villaStatus(h), rows: [], units: 0 });
+        const g = map.get(h);
+        g.rows.push(i);
+        g.units += this.balanceOf(i);
+      }
+      return [...map.values()];
+    },
+    get leftoverSelected() { return this.leftoverRows.filter((i) => this.leftoverSel[i.id]); },
+    get leftoverNegative() {
+      return this.inventory.filter((i) => key(this.holdingOf(i)) !== "stock" && this.balanceOf(i) < 0 &&
+        (this.leftoverVilla === "ALL" || this.holdingOf(i) === this.leftoverVilla));
+    },
+    /* The main-stock line the leftover would go back to (same article + system). */
+    mainStockLine(item) {
+      const k = stockKey(item.article_ref, item.system_ref, "Stock");
+      return this.inventory.find((i) => stockKey(i.article_ref, i.system_ref, this.holdingOf(i)) === k) || null;
+    },
+
+    exportLeftovers() {
+      const rows = [["held_for", "job_status", "system_ref", "article_ref", "description", "unit",
+                     "received_qty", "issued_qty", "left_over"]];
+      for (const i of this.leftoverRows) {
+        rows.push([this.holdingOf(i), this.villaStatus(this.holdingOf(i)), i.system_ref || "",
+                   i.article_ref, i.description || "", i.unit || "",
+                   num(i.received_qty), num(i.issued_qty), this.balanceOf(i)]);
+      }
+      downloadCsv(rows, "eurolux-villa-leftovers-" + new Date().toISOString().slice(0, 10) + ".csv");
+    },
+
+    async returnLeftovers(items) {
+      if (this.saving) return;
+      const rows = (items || []).filter((i) => this.balanceOf(i) > 0);
+      if (!rows.length) { this.toast("Nothing left over to move.", "err"); return; }
+
+      const villas = [...new Set(rows.map((i) => this.holdingOf(i)))];
+      const open = villas.filter((h) => this.villaStatus(h) !== "complete");
+      const units = rows.reduce((t, i) => t + this.balanceOf(i), 0);
+      if (!confirm(
+        "Move " + rows.length + " leftover line(s), " + this.fmt(units) + " units in all, to main stock?\n\n" +
+        "From: " + villas.join(", ") +
+        (open.length
+          ? "\n\n⚠ Not marked complete: " + open.join(", ") +
+            ".\nOnly continue if you are sure this material will not be needed for that villa."
+          : "") +
+        "\n\nEach article goes back to main stock under the same system, and both villa and main stock are updated in the ledger.")) return;
+
+      this.saving = true;
+      try {
+        const stamp = { updatedAt: serverTimestamp(), updatedBy: this.displayName };
+        const created = new Map();   // stockKey -> new main-stock line id (shared across villas)
+        const ops = [];
+        for (const i of rows) {
+          const qty = this.balanceOf(i);
+          const villa = this.holdingOf(i);
+          const k = stockKey(i.article_ref, i.system_ref, "Stock");
+          let target = this.mainStockLine(i);
+          let targetId = target ? target.id : created.get(k);
+          if (!targetId) {
+            const ref = doc(collection(db, collections.inventory));
+            targetId = ref.id;
+            created.set(k, targetId);
+            ops.push((b) => b.set(ref, {
+              article_ref: i.article_ref, description: i.description || "",
+              system_ref: i.system_ref || "", holding: "Stock",
+              unit: i.unit || "", location: "", min_qty: 0,
+              pu_qty: this.puQty(i) > 1 ? this.puQty(i) : 1, pack_unit: this.packUnit(i) || "PKT",
+              bar_length: this.barLength(i) || 0, on_order: 0,
+              received_qty: 0, issued_qty: 0, balance_stock_qty: 0,
+              createdAt: serverTimestamp(), createdBy: this.displayName, ...stamp,
+            }));
+          }
+          const tid = targetId;
+          const xid = doc(collection(db, collections.movements)).id;
+          const common = {
+            article_ref: i.article_ref, description: i.description || "",
+            type: "transfer", qty, transfer_id: xid,
+            project_id: "", project_code: "",
+            at: serverTimestamp(), by: this.authUser.uid, by_name: this.displayName,
+          };
+          ops.push((b) => b.update(doc(db, collections.inventory, i.id),
+            { received_qty: increment(-qty), balance_stock_qty: increment(-qty), ...stamp }));
+          ops.push((b) => b.update(doc(db, collections.inventory, tid),
+            { received_qty: increment(qty), balance_stock_qty: increment(qty), ...stamp }));
+          ops.push((b) => b.set(doc(collection(db, collections.movements)), {
+            ...common, item_id: i.id, system_ref: i.system_ref || "", holding: villa,
+            direction: "out", note: "Villa leftover returned to main stock",
+          }));
+          ops.push((b) => b.set(doc(collection(db, collections.movements)), {
+            ...common, item_id: tid, system_ref: i.system_ref || "", holding: "Stock",
+            direction: "in", note: "Villa leftover returned from " + villa,
+          }));
+        }
+        // Each new main-stock line is created earlier in ops than any update to
+        // it, and the chunks are committed in order, so the create always lands first.
+        for (let n = 0; n < ops.length; n += 400) {
+          const batch = writeBatch(db);
+          ops.slice(n, n + 400).forEach((op) => op(batch));
+          this.track(batch.commit(), "the leftovers");
+        }
+        this.leftoverSel = {};
+        this.toast(this.savedMsg(rows.length + " leftover line(s) moved to main stock" +
+          (created.size ? " — " + created.size + " new main-stock line(s) created." : ".")), "ok");
+      } catch (e) {
+        this.toast("Could not move the leftovers: " + e.message, "err");
+      } finally { this.saving = false; }
+    },
+
     /* ---------------- projects ---------------- */
     openProject(p = null, seedName = "") {
+      this.projectHoldings = this.leftoverVillas;
       this.projectForm = p
-        ? { ...p }
-        : { project_code: seedName || "", client: "", status: "active", notes: "" };
+        ? { ...p, holding: p.holding || this.suggestHolding(p) }
+        : { project_code: seedName || "", client: "", status: "active", notes: "", holding: "" };
       this.projectOpen = true;
     },
     async saveProject() {
@@ -5039,7 +6085,7 @@ document.addEventListener("alpine:init", () => {
       try {
         const data = {
           project_code: f.project_code, client: f.client || "",
-          status: f.status || "active", notes: f.notes || "",
+          status: f.status || "active", notes: f.notes || "", holding: f.holding || "",
           updatedAt: serverTimestamp(), updatedBy: this.displayName,
         };
         let newId = "";
@@ -5058,6 +6104,7 @@ document.addEventListener("alpine:init", () => {
           this.mto.projectId = newId;
         }
         if (newId && this.bookOpen && !this.book.projectId) this.book.projectId = newId;
+        if (newId && this.currentTab === "delivery" && this.dnPendingJob) this.dnJobCreated(f.project_code);
 
         this.toast(this.savedMsg('Job "' + f.project_code + '" saved.'), "ok");
       } catch (e) {
@@ -5314,41 +6361,75 @@ document.addEventListener("alpine:init", () => {
 
       const unknown = lines.filter((l) => !l.known);
       const issuable = lines.filter((l) => l.known);
-      if (!issuable.length) { this.toast("None of these articles are in the stock list.", "err"); return; }
+      if (!issuable.length) { this.toast("None of these articles are in main stock.", "err"); return; }
 
+      // 1. Material that would come from main stock filed under another system.
+      const bomSystem = this.selectedBom.system_ref || "this system";
+      const otherLines = issuable.filter((l) => l.other_qty > 0);
+      if (otherLines.length) {
+        const list = otherLines.map((l) =>
+          "• " + l.article_ref + " " + l.description + ": " + this.fmt(l.other_qty) +
+          " from " + l.other_systems.join(", ")).join("\n");
+        if (!confirm(
+          "⚠ Different system\n\n" +
+          otherLines.length + " line(s) are not fully in main stock under " + bomSystem +
+          ". They are in main stock under a different system:\n\n" + list +
+          "\n\nIssue them from that stock?")) {
+          this.toast("Booking cancelled. Nothing was posted.", "err");
+          return;
+        }
+      }
+
+      // 2. The usual summary.
       const shortLines = issuable.filter((l) => l.short > 0);
       const msg =
         "Book " + this.wizard.units + " × " + this.selectedBom.name +
         " to " + project.project_code + "?\n\n" +
-        issuable.length + " profile line(s) will be issued." +
+        issuable.length + " profile line(s) will be issued from main stock." +
+        (issuable.some((l) => l.sub)
+          ? "\n\nSubstitutes: " + issuable.filter((l) => l.sub).map((l) => l.article_ref + " instead of " + l.bom_ref).join(", ")
+          : "") +
         (unknown.length
-          ? "\n\n" + unknown.length + " article(s) are not in the stock list and will be skipped:\n" +
+          ? "\n\n" + unknown.length + " article(s) are not in main stock and will be skipped:\n" +
             unknown.map((l) => l.article_ref).join(", ")
           : "") +
         (shortLines.length
-          ? "\n\n⚠ " + shortLines.length + " line(s) exceed available stock and will go negative."
+          ? "\n\n⚠ " + shortLines.length + " line(s) exceed main stock and will go negative."
           : "");
       if (!confirm(msg)) return;
 
       this.issuing = true;
       try {
-        const batch = writeBatch(db);
+        const baseNote = "BOM: " + this.selectedBom.name + " × " + this.wizard.units;
+        const writes = [];
         for (const l of issuable) {
-          batch.update(doc(db, collections.inventory, l.item_id), {
-            issued_qty: increment(l.required),
-            balance_stock_qty: increment(-l.required),
-            updatedAt: serverTimestamp(),
-            updatedBy: this.displayName,
-          });
-          batch.set(doc(collection(db, collections.movements)), {
-            item_id: l.item_id, article_ref: l.article_ref, description: l.description,
-            system_ref: l.system_ref || "", type: "issue", qty: l.required,
-            project_id: project.id, project_code: project.project_code,
-            note: "BOM: " + this.selectedBom.name + " × " + this.wizard.units,
-            at: serverTimestamp(), by: this.authUser.uid, by_name: this.displayName,
-          });
+          for (const s of l.sources) {
+            if (!(s.qty > 0)) continue;
+            writes.push((batch) => {
+              batch.update(doc(db, collections.inventory, s.item_id), {
+                issued_qty: increment(s.qty),
+                balance_stock_qty: increment(-s.qty),
+                updatedAt: serverTimestamp(),
+                updatedBy: this.displayName,
+              });
+              batch.set(doc(collection(db, collections.movements)), {
+                item_id: s.item_id, article_ref: l.article_ref, description: l.description,
+                system_ref: s.system_ref || "", holding: "Stock", type: "issue", qty: s.qty,
+                project_id: project.id, project_code: project.project_code,
+                note: baseNote + (l.sub ? " (substitute for " + l.bom_ref + ")" : "") +
+                      (s.other ? " (from " + (s.system_ref || "no system") +
+                                  " stock, BOM system " + bomSystem + ")" : ""),
+                at: serverTimestamp(), by: this.authUser.uid, by_name: this.displayName,
+              });
+            });
+          }
         }
-        this.track(batch.commit(), "the bundle");
+        // Two writes per source; stay well under Firestore's 500-write batch limit.
+        for (let i = 0; i < writes.length; i += 200) {
+          const batch = writeBatch(db);
+          writes.slice(i, i + 200).forEach((w) => w(batch));
+          this.track(batch.commit(), "the bundle");
+        }
         this.toast(this.savedMsg("Package bundle booked to " + project.project_code +
                    " — " + issuable.length + " lines posted."), "ok");
         this.go("projects");
@@ -5530,6 +6611,7 @@ document.addEventListener("alpine:init", () => {
       const cCode = col("project_code", "project");
       if (cCode < 0) { this.toast('CSV must contain a "project_code" column.', "err"); return; }
       const cClient = col("client"), cStatus = col("status"), cNotes = col("notes", "note");
+      const cHold = col("holding", "held_as");
 
       let created = 0, updated = 0, skipped = 0;
       const batch = writeBatch(db);
@@ -5545,6 +6627,7 @@ document.addEventListener("alpine:init", () => {
           client: cClient >= 0 ? String(r[cClient] ?? "").trim() : ((existing && existing.client) || ""),
           status: cStatus >= 0 ? (String(r[cStatus] ?? "").trim() || "active") : ((existing && existing.status) || "active"),
           notes: cNotes >= 0 ? String(r[cNotes] ?? "").trim() : ((existing && existing.notes) || ""),
+          holding: cHold >= 0 ? String(r[cHold] ?? "").trim() : ((existing && existing.holding) || ""),
           updatedAt: serverTimestamp(), updatedBy: this.displayName,
         };
         if (existing) { batch.update(doc(db, collections.projects, existing.id), fields); updated++; }
