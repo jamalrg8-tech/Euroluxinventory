@@ -532,7 +532,9 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
         <div class="search">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-          <input class="input" type="search" x-model="searchQuery" @input="onSearch()"
+          <!-- Debounced: every keystroke otherwise re-filtered the whole ledger,
+               so typing a six-digit article code did that work six times over. -->
+          <input class="input" type="search" x-model.debounce.250ms="searchQuery" @input="onSearch()"
                  :placeholder="searchPlaceholder">
         </div>
 
@@ -3396,6 +3398,24 @@ const squash = (v) => String(v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 const stockKey = (article, system, holding) =>
   squash(article) + "|" + squash(system) + "|" + squash(holding || "Stock");
 
+/* The set of article-record ids that still exist, used to spot ledger entries
+   left pointing at records a reload replaced. Held outside the component on
+   purpose: it is a derived cache, not state, so writing it must not make
+   Alpine think something changed. The snapshot listener assigns a brand new
+   array to `inventory` whenever the collection changes, so comparing the array
+   itself is enough to know when the set has to be built again. Without this
+   the set was rebuilt once per ledger entry — 1,271 x 7,447 operations for a
+   single read of currentMovements, which is what made the app hang. */
+let _liveIds = { src: null, set: new Set() };
+const liveIdsFor = (inventory) => {
+  if (_liveIds.src !== inventory) {
+    const s = new Set();
+    for (const i of inventory) s.add(i.id);
+    _liveIds = { src: inventory, set: s };
+  }
+  return _liveIds.set;
+};
+
 /* Bar length is written down three different ways depending on who typed it
    — "6", "600", "6000" all mean a six-metre bar — so it is normalised to
    millimetres on the way in and only ever stored that way. */
@@ -4089,18 +4109,20 @@ document.addEventListener("alpine:init", () => {
        detached from any current record.
     -------------------------------------------------------------------- */
     get liveItemIds() {
-      const s = new Set();
-      for (const i of this.inventory) s.add(i.id);
-      return s;
+      return liveIdsFor(this.inventory);
     },
     isSuperseded(m) {
-      return !!(m && m.item_id) && !this.liveItemIds.has(m.item_id);
+      return !!(m && m.item_id) && !liveIdsFor(this.inventory).has(m.item_id);
     },
     get currentMovements() {
-      return this.movements.filter((m) => !this.isSuperseded(m));
+      const live = liveIdsFor(this.inventory);
+      return this.movements.filter((m) => !(m.item_id && !live.has(m.item_id)));
     },
     get supersededCount() {
-      return this.movements.length - this.currentMovements.length;
+      const live = liveIdsFor(this.inventory);
+      let n = 0;
+      for (const m of this.movements) if (m.item_id && !live.has(m.item_id)) n++;
+      return n;
     },
 
     get filteredMovements() {
