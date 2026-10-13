@@ -184,6 +184,36 @@ with it: 63 bars of 6 m reads as 378 m under the balance. The field accepts 6,
 600 or 6000 and normalises all three, because the workbook writes it all three
 ways.
 
+### Superseded ledger entries
+
+Reloading the stock list deletes every article and creates it afresh, so the
+movements posted against the old articles are left pointing at documents that
+no longer exist. They cannot be removed — `allow update, delete: if false` is
+the whole point of the ledger — and they drive no balance, because balances
+live on the article records. All they do is pad the view.
+
+`isSuperseded(m)` tests whether `m.item_id` still matches a live article;
+`currentMovements` is everything that does. The ledger, the dashboard's recent
+movements, the Settings count and `projectLines` all work from that, with a
+banner offering to show the rest. A deliberately deleted article's history is
+treated the same way, which is right: it is detached from any current record.
+
+### Renaming a holding after movements exist
+
+A movement stores the holding's name as text, and no one may rewrite a
+movement, so a holding renamed later keeps its old name in every entry already
+posted. `holdingAliases` in `firebase-config.js` maps the old spelling to the
+new one, and `displayHolding()` applies it wherever a movement's holding is
+shown. The stored row is untouched — the audit trail still says exactly what
+was posted — while the ledger shows the name people recognise.
+
+```js
+export const holdingAliases = { "MWADOWS-09": "MEADOWS-09" };
+```
+
+Correct the holding on the article records as well, or new movements will keep
+carrying the old name.
+
 ### Millimetres, bars and packs
 
 A profile is bought by the pack, stocked by the bar and consumed by the
@@ -281,31 +311,10 @@ quantity and, where the material is packed, the pack size:
                  1 PKT = 100 PCE      1 PKT
 ```
 
-so one packet books in 100 pieces. The pack sizes on the note are saved to each
-article unless you untick that box, so PU Qty fills itself in as deliveries arrive.
-
-**Where each line goes.** Every line has its own **Send to** (main stock, or a
-job) and **System**:
-
-- **Send every line to** sets all lines at once — main stock, an existing job,
-  or **+ Create a new job…**, which opens the job dialog and, once saved, sends
-  the lines to the new job. **System** does the same for the system; left on
-  *Each article's usual system*, each line takes the system the article is
-  already held under there (then in main stock, then anywhere).
-- The **Send to** and **System** boxes on each row change one line, so a note
-  that is partly stock and partly for one job is booked in one go. A blue
-  banner says how the delivery is split.
-- If the note's customer reference names a job, a banner offers to send every
-  line to it.
-- A job's material lands in the holding linked to the job (see *Jobs and their
-  holdings*), or in a holding named after the job if none is linked.
-- Lines that land on the same article + system + holding are added together.
-  A stock line that does not exist yet is created, copying unit, pack size and
-  bar length from another line of the same article where there is one
-  (*new line*), or from the note (*new article*).
-- A receipt for a job carries the job on its ledger row
-  (*"DN PSL079791 — for 1393 - SAVANNAH"*). It is a receipt, not an issue, so it
-  does not count as booked to the job on Villa Projects.
+so one packet books in 100 pieces. Articles that appear on two lines of the
+same note are added together. Anything not in your stock list is created, and
+the pack sizes on the note are saved to each article unless you untick that
+box, so PU Qty fills itself in as deliveries arrive.
 
 It must be the original PDF. A scan or a photo of a printed note has no text in
 it to read; use Receive on each article for those.
@@ -325,101 +334,7 @@ when you switch to **All holdings**, and on every ledger row as **From**.
 
 Booking and the MTO import both ask which holding to draw from, rather than
 guessing, because holding names ("Villa 80 - ST3, Esmeralda") and job codes
-("1369-Esmeralda") are not the same strings. The BOM Wizard always draws from
-main stock.
-
-### Jobs and their holdings
-
-A job (Villa Projects) and the villa holding on the stock list carry different
-names — "1393 - SAVANNAH" against "Villa 24, Street 4, Savannah A". Each job
-has a **Material for this job is held as** box that links the two. Delivery
-notes send a job's material to that holding, and Villa Leftovers shows the
-job's status beside it. When the box is empty, deliveries use a holding named
-after the job, and Villa Leftovers falls back to matching names.
-
-`import/import-2-projects.csv` carries a `holding` column with the eight links
-the ledger supports (each job drew its material from that holding):
-1350 → MWADOWS-09, 1361 - C35 → 1361, 1361 - C35 (CURVE) → SHORTAGE (C35) -
-SIDE HUNG WINDOWS, 1369-Esmeralda (balance doors) → Villa 80 - ST3,
-Esmeralda – A, 1383 → Apartment 603, 1392 → Marsa Al Arab, 1393 → Villa 24
-Savannah, 1397 → Villa D58 Flame Tree. The other five are left for you to set.
-
-### Substitutes
-
-**Substitutes** (sidebar) is a register of which article can stand in for
-which: one record per article, listing its substitutes with a note each and
-what main stock holds of every one. The search box finds an article whether it
-is the one being replaced or the substitute; **Export CSV** gives the list.
-*Works both ways* also records the reverse.
-
-The BOM Wizard and MTO Import offer **Substitute…** on any line that is not in
-the stock list, is short, or (in the wizard) is only held for other jobs. The
-dialog lists the recorded substitutes first with what is available, then lets
-you search the whole stock list; a choice not yet recorded is saved to the
-register (untick to skip). The substitute is booked in place of the original —
-its own stock line goes down — and the ledger note says *"(substitute for …)"*.
-A substitute choice lasts for that booking only.
-
-Clicking **only held for other jobs ›** or **short ›** in the wizard opens
-**Where … is held**: every line of the article, with holding, job and status,
-system, balance and on order, and **Move to main stock** on villa lines that
-have a balance (opens Move, pre-filled).
-
-Substitutes live in their own `substitutes` collection, so **publish the
-updated `firestore.rules`** after deploying this version, or the page reports
-"No permission to read substitutes".
-
-### Returning villa leftovers to main stock
-
-Material bought for a villa is often not all used. Whatever is left on a villa
-line — received minus issued, above zero — stays reserved for that villa until
-you return it. **Villa Leftovers**, in the sidebar, lists it all and moves it
-back.
-
-**The report**
-
-- One card per villa, with every article that still has a balance: system,
-  article, description, unit, received, issued, **Left over**, and what main
-  stock holds for the same article and system now (**new line** if it holds
-  none).
-- Each card shows the villa's job status from **Villa Projects** — *active*,
-  *on hold* or *complete* — or *no matching job* if no job matches.
-  The job is found by name: the job number is dropped and the rest is looked
-  for inside the villa's holding name, ignoring capitals, spaces and
-  punctuation — so "Villa 24, Street 4, Savannah A" matches "1393 - SAVANNAH"
-  and "Marsa Al Arab" matches "1392 - MARSA AL ARAB". Job names shorter than
-  four letters ("C35") only match exactly, and the longest match wins.
-- Pick one villa or **All villas**, tick **Completed villas only** to see just
-  the finished jobs, and use the search box at the top to find an article.
-- **Export CSV** downloads the report as shown.
-- Villa lines that are negative (issued more than received) have nothing to
-  return and are not listed; a note at the bottom counts them. Find them under
-  **Reports › Negative**.
-
-**Moving leftovers back**
-
-1. When the villa is finished, mark its job **complete** in Villa Projects.
-2. In Villa Leftovers, tick the lines to return, or the box beside the villa's
-   name to tick all of them.
-3. Press **Move *n* selected to main stock**, or **Move all to main stock** on
-   the villa's card.
-4. Confirm. If any villa in the selection is not marked complete, the question
-   warns you — only continue if you are sure that material will not be needed.
-
-Each line's whole leftover goes to main stock under **the same article and
-system**. If main stock has never held that article under that system, the line
-is created, carrying the unit, pack size and bar length across.
-
-It is booked exactly like **Move**: a `transfer`, not a delivery or an issue.
-The quantity comes off the villa line's received total and goes on to the main
-stock line's, so the yard's overall received, issued and balance totals do not
-change. The ledger gets a matched pair of entries — *"Villa leftover returned to
-main stock"* on the villa side and *"Villa leftover returned from Villa …"* on
-the main-stock side. To undo a return, use **Move** on the main-stock line to
-send the quantity back to the villa.
-
-To return only part of a leftover, use **Move** on that villa line in Master
-Stock instead.
+("1369-Esmeralda") are not the same strings.
 
 ---
 
@@ -474,10 +389,8 @@ before it doubles every quantity in it.
 
 ### Starting from a clean database
 
-Settings has a **Start over** panel that deletes every article and job (and the
-BOM templates too, only if you tick that box), and clears the record of which
-files were imported so the same import files can go in again. The substitutes
-register is always kept. Use it before importing a stock list if the database already has
+Settings has a **Start over** panel that deletes every article, job and BOM
+template. Use it before importing a stock list if the database already has
 something in it (the 8 demo articles, or an earlier import) — otherwise the
 movements import adds its quantities on top of what is already there and every
 balance doubles.
@@ -486,22 +399,6 @@ The movement ledger is deliberately left alone: no one can delete a movement
 from inside the app, which is what makes the ledger worth trusting. If you need
 to clear the ledger too, delete the `movements` collection from the Firebase
 console, which runs with admin rights and is not bound by the rules.
-
-**Reloading everything from the master workbook** (as on 8 October 2026). Export the Movement Ledger first (Movement Ledger → Export CSV) if you want a copy of what is about to go:
-
-1. Firebase console → Firestore Database → `movements` → ⋮ → **Delete
-   collection**. Without this the old ledger stays beside the new one and every
-   history is doubled.
-2. In the app: Settings → **Start over** (leave *Also delete the BOM templates*
-   unticked to keep your templates) → type DELETE.
-3. Master Stock → Import CSV, in order: `import-1-stock.csv`,
-   `import-2-projects.csv`, `import-3-movements.csv`.
-4. Set any job statuses (complete / on hold) again, and link the five jobs
-   without a holding if you want them linked.
-
-`master_stock_list.xlsx` as supplied on 8 October was checked line by line
-against these files: the same 1,270 stock lines, and the same ordered, received
-and issued totals on every one, so they reload it exactly.
 
 ### Loading the master stock list
 
@@ -552,42 +449,6 @@ group" pulls in every article carrying a system reference at 1 per unit so you
 correct numbers rather than typing the bundle. Pick the template, the number of
 units and a villa project, and it shows required vs. on-hand vs. shortfall per
 line before **Batch book package bundle** posts the lot.
-
-Where the bundle is drawn from:
-
-1. **Main stock only.** The wizard looks at the *Stock* holding and nothing
-   else. Material held for another villa is never touched, because it is
-   reserved for that job.
-2. **The template's own system first.** For each article it uses main stock
-   filed under the template's system (for example *ADS / AWS 65*). This is the
-   **On hand (this system)** column.
-3. **Then main stock under another system.** If that is not enough, it uses
-   the same article from main stock filed under a different system. Those lines
-   are marked **other system**, the **Other systems** column shows how much is
-   taken, and a blue notice above the table lists them.
-4. **Then the shortfall.** Anything still not covered is shown in **Short by**.
-   Booking anyway posts the shortfall against the template-system line in main
-   stock, which goes negative until the material is bought and received.
-
-When you press **Batch book package bundle** and any line uses another system's
-stock, you are asked first — *"⚠ Different system … Issue them from that
-stock?"* — with each article, the quantity and the system it would come from.
-**Cancel** stops the booking and posts nothing; **OK** goes on to the usual
-summary. In the Movement Ledger, an issue taken from another system's stock
-says so in its note, e.g. *"BOM: AWS 65 Window × 10 (from ASE 55 Lift & Slide
-stock, BOM system ADS / AWS 65)"*.
-
-| Status | Meaning |
-|---|---|
-| available | Covered by main stock under the template's system. |
-| other system | Covered, but partly or wholly from main stock under another system — you will be asked to confirm. |
-| short | Main stock, all systems included, cannot cover it. |
-| only held for other jobs | The article exists only in villa holdings, so it is skipped. Move stock into main stock first. |
-| not in stock list | The article is not in the stock list at all, so it is skipped. |
-
-**Villa Leftovers** — material still held for a villa after its issues, ready
-to go back to main stock once the job is finished. See
-[Returning villa leftovers to main stock](#returning-villa-leftovers-to-main-stock).
 
 **MTO Import** reads the *Material analysis* spreadsheet Logikal exports for a
 job and books the whole thing off stock in one posting. It finds the Profiles,
@@ -695,9 +556,8 @@ would produce nothing.
 |---|---|
 | `inventory` | `system_ref`, `article_ref`, `holding`, `description`, `unit`, `pu_qty`, `pack_unit`, `bar_length`, `on_order`, `location`, `min_qty`, `received_qty`, `issued_qty`, `balance_stock_qty` |
 | `movements` | `item_id`, `article_ref`, `description`, `system_ref`, `holding`, `type`, `qty`, `project_id`, `project_code`, `note`, `at`, `by`, `by_name`, and for a transfer `transfer_id` + `direction` |
-| `projects` | `project_code`, `client`, `status`, `notes`, `holding` (the villa holding the job's material is held as) |
+| `projects` | `project_code`, `client`, `status`, `notes` |
 | `boms` | `name`, `system_ref`, `lines[{article_ref, description, qty_per}]` |
-| `substitutes` | `article_ref`, `description`, `note`, `subs[{article_ref, description, note}]` |
 | `settings/app` | `shortageThreshold` |
 | `users/{uid}` | `email`, `name`, `lastSeen` |
 
@@ -742,8 +602,4 @@ is required to start, and projects are never paused for inactivity.
 | Changes don't appear after a deploy | Bump `CACHE_VERSION` in `sw.js`, then hard-reload. |
 | Stuck on "Starting…" | `cdn.jsdelivr.net` or `gstatic.com` is blocked by the network. |
 | Install prompt missing | PWA install requires HTTPS — GitHub Pages provides it; `file://` does not. |
-| BOM Wizard says "short" but Master Stock shows plenty | Master Stock is filtered to one system. Switch it to **ALL SYSTEMS**: the stock may be under another system (the wizard will use it after asking you) or held for a villa (return it with **Villa Leftovers** or **Move**). |
-| A villa line in BOM bookings went negative before this version | Older versions issued from the first line with a matching article, which could be a villa line. Fix it with **Move** from main stock, and cancel any matching **On order** quantity. |
-| Villa Leftovers shows "no matching job" | No job is linked to that holding. Edit the job in Villa Projects and choose the holding under **Material for this job is held as**. |
-| "No permission to read substitutes" | The updated `firestore.rules` was not published. Paste it into Firebase console → Firestore → Rules → Publish. |
 | Offline work disappeared | Site data was cleared, or the app was used in a private window. Install the PWA properly and avoid clearing site data. |

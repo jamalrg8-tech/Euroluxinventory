@@ -56,6 +56,22 @@ export const knownSystems = [
   "FWS 50 CW",
 ];
 
+/* Corrections to holding names that are already written into the movement
+   ledger. The ledger is append-only — nothing, including the Firebase console,
+   is allowed to rewrite a movement, which is what makes it worth trusting — so
+   a holding that was misspelled when those entries were posted keeps the
+   misspelling for ever in the stored record.
+
+   This map fixes the SPELLING ON SCREEN only. The stored entry is untouched,
+   so the audit trail still says exactly what was posted at the time; the
+   ledger simply shows the name people recognise. Add a line here whenever a
+   holding is renamed after movements have been posted against it.
+
+       "OLD SPELLING": "Correct spelling",                                   */
+export const holdingAliases = {
+  "MWADOWS-09": "MEADOWS-09",
+};
+
 /* Default reorder threshold, used for any article that has no
    per-article min_qty of its own. Editable in-app under Settings. */
 export const defaultShortageThreshold = 10;
@@ -68,5 +84,4 @@ export const collections = {
   boms: "boms",
   users: "users",
   settings: "settings",
-  substitutes: "substitutes",
 };

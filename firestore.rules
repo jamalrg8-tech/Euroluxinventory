@@ -35,11 +35,6 @@ service cloud.firestore {
       allow read, write: if signedIn();
     }
 
-    // Substitutes register: which article can replace which.
-    match /substitutes/{docId} {
-      allow read, write: if signedIn();
-    }
-
     // Shared app settings (default reorder threshold).
     match /settings/{docId} {
       allow read, write: if signedIn();
@@ -96,10 +91,6 @@ service cloud.firestore {
 //     match /boms/{docId} {
 //       allow read:  if signedIn();
 //       allow write: if isAdmin();
-//     }
-//     match /substitutes/{docId} {
-//       allow read:  if signedIn();
-//       allow write: if canWrite();
 //     }
 //     match /settings/{docId} {
 //       allow read:  if signedIn();
