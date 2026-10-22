@@ -469,7 +469,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
             posted on one device appears on every other device within a second.
           </p>
         </div>
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.44, 2026年10月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.45, 2026年10月 - アイカ 🤌🏽</p>
       </div>
     </div>
   </template>
@@ -979,6 +979,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                 <thead><tr>
                   <th>When</th><th>Type</th><th>Article</th><th>Description</th>
                   <th class="right">Qty</th><th>From</th><th>Project</th><th>Note</th><th>By</th>
+                  <th class="right col-actions"></th>
                 </tr></thead>
                 <tbody>
                   <template x-for="m in visibleMovements" :key="m.id">
@@ -1002,6 +1003,14 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                       <td class="muted" x-text="m.project_code || '—'"></td>
                       <td class="faint truncate" style="max-width:200px" x-text="m.note || '—'"></td>
                       <td class="faint truncate" x-text="m.by_name || '—'"></td>
+                      <td class="right col-actions">
+                        <!-- Only an issue against a live article can be taken
+                             back; everything else has nothing to reverse. -->
+                        <button class="btn btn-sm btn-ghost"
+                                x-show="m.type === 'issue' && m.project_id && !isSuperseded(m)"
+                                @click="openUnbookFromMovement(m)"
+                                title="Booked in error? Take it back off this job.">Return</button>
+                      </td>
                     </tr>
                   </template>
                 </tbody>
@@ -1254,16 +1263,28 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                     <thead><tr>
                       <th>Article</th><th>Material Description</th><th>System</th>
                       <th class="right">Qty booked</th><th class="right">Bookings</th><th>Last booked</th>
+                      <th class="right col-actions">Actions</th>
                     </tr></thead>
                     <tbody>
                       <template x-for="l in projectLines(p.id)" :key="l.article_ref + '|' + l.system_ref">
-                        <tr>
+                        <tr :style="l.qty <= 0 ? 'opacity:.55' : ''">
                           <td class="mono" style="color:var(--accent);font-weight:700" x-text="l.article_ref"></td>
                           <td x-text="l.description"></td>
                           <td class="muted" x-text="l.system_ref || '—'"></td>
                           <td class="right num" style="font-weight:700" x-text="fmt(l.qty)"></td>
                           <td class="right num muted" x-text="fmt(l.count)"></td>
-                          <td class="faint" x-text="when(l.last)"></td>
+                          <td class="faint">
+                            <span x-text="when(l.last)"></span>
+                            <!-- Says plainly that some of this went back, so the
+                                 smaller number is not read as a lost booking. -->
+                            <span class="pill pill-mute" style="margin-left:.35rem" x-show="l.returned"
+                                  x-text="fmt(l.returned) + ' returned'"></span>
+                          </td>
+                          <td class="right col-actions">
+                            <button class="btn btn-sm btn-ghost" x-show="l.qty > 0"
+                                    @click="openUnbook(p.id, l.article_ref, l.system_ref, l.description)"
+                                    title="Booked in error? Take it back off this job.">Return</button>
+                          </td>
                         </tr>
                       </template>
                     </tbody>
@@ -2327,7 +2348,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
           </div>
         </div>
 
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.44, 2026年10月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.45, 2026年10月 - アイカ 🤌🏽</p>
       </div><!-- /view -->
     </main>
   </div>
@@ -2919,6 +2940,111 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
           <button type="button" class="btn" x-show="pick.current" @click="applySubstitute('')" style="margin-right:auto">Stop substituting</button>
           <button type="button" class="btn" @click="pick.open=false">Cancel</button>
         </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ===================== TAKE A BOOKING BACK MODAL ===================== -->
+  <template x-if="unbookOpen">
+    <div class="backdrop" @click.self="unbookOpen=false" @keydown.escape.window="unbookOpen=false">
+      <div class="modal" style="max-width:620px">
+        <form @submit.prevent="saveUnbook()">
+          <div class="modal-head">
+            <h3 x-text="'Take ' + (unbookForm.article_ref || '') + ' back off the job'"></h3>
+            <button type="button" class="btn btn-sm btn-ghost" @click="unbookOpen=false">Close</button>
+          </div>
+          <div class="modal-body">
+            <div class="card" style="padding:.75rem">
+              <div class="grid-2">
+                <div>
+                  <div class="label">Job</div>
+                  <div x-text="unbookForm.project_code || '—'"></div>
+                </div>
+                <div>
+                  <div class="label">Article</div>
+                  <div><span class="mono" style="color:var(--accent);font-weight:700"
+                             x-text="unbookForm.article_ref"></span>
+                    <span class="muted" x-show="unbookForm.description"
+                          x-text="' — ' + unbookForm.description"></span></div>
+                </div>
+                <div>
+                  <div class="label">System</div>
+                  <div x-text="unbookForm.system_ref || '—'"></div>
+                </div>
+                <div>
+                  <div class="label">Booked to this job</div>
+                  <div class="num" x-text="fmt(unbookForm.most)"></div>
+                </div>
+              </div>
+              <div style="margin-top:.5rem" x-show="unbookForm.from">
+                <div class="label">Came out of</div>
+                <div x-text="displayHolding(unbookForm.from)"></div>
+              </div>
+            </div>
+
+            <template x-if="!unbookForm.sources || !unbookForm.sources.length">
+              <div class="banner banner-warn">
+                <div>
+                  <strong>Nothing left to take back.</strong>
+                  <span>Every booking of this article on this job has already been reversed, or the
+                    stock line it came from no longer exists.</span>
+                </div>
+              </div>
+            </template>
+
+            <div class="grid-2">
+              <div class="field">
+                <label class="label">How many to take back</label>
+                <input class="input" type="number" min="0" step="any" x-model.number="unbookForm.qty"
+                       :max="unbookForm.most">
+                <span class="hint" x-text="'Up to ' + fmt(unbookForm.most) + '.'"></span>
+              </div>
+              <div class="field">
+                <label class="label">Put it</label>
+                <select class="select" x-model="unbookForm.dest">
+                  <template x-for="d in unbookDestinations" :key="d.value">
+                    <option :value="d.value" x-text="d.label" :selected="d.value === unbookForm.dest"></option>
+                  </template>
+                </select>
+                <span class="hint" x-show="unbookForm.from && key(unbookForm.dest) === key(unbookForm.from)">
+                  Straight back where it came from.
+                </span>
+                <span class="hint" x-show="unbookForm.from && key(unbookForm.dest) !== key(unbookForm.from)"
+                      x-text="'Comes off ' + displayHolding(unbookForm.from) + ' as well, which is a transfer.'"></span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="label">Why</label>
+              <input class="input" x-model.trim="unbookForm.note"
+                     placeholder="e.g. MTO changed, a different article was used">
+              <span class="hint">Goes on the correction in the ledger, so the next person can see
+                what happened without having to ask.</span>
+            </div>
+
+            <!-- x-show, not x-if: Alpine re-reads a nested binding before the
+                 outer x-if removes it, so a null target would throw first. -->
+            <p class="hint" style="margin:0" x-show="unbookPreview()" x-text="unbookPreview()"></p>
+            <p class="hint" style="margin:0" x-show="unbookForm.dest && !unbookTarget"
+               x-text="'There is no stock line for this article under ' +
+                       displayHolding(unbookForm.dest || '') + ' yet, so one is created.'"></p>
+
+            <div class="banner banner-info">
+              <div>
+                <strong>The original booking stays in the ledger.</strong>
+                <span>Nothing is erased. A correction is posted against it carrying this job and
+                  your reason, so both the mistake and the fix stay visible for good.</span>
+              </div>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn" @click="unbookOpen=false">Cancel</button>
+            <button type="submit" class="btn btn-primary"
+                    :disabled="unbookSaving || !unbookForm.most || !(unbookForm.qty > 0)">
+              <span x-show="unbookSaving" class="spinner"></span><span>Take it back</span>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   </template>
@@ -4067,6 +4193,8 @@ document.addEventListener("alpine:init", () => {
        receiving a new note and reviewing the ones already received. */
     deliveryNotes: [], dnView: "receive", dnNoteOpen: false, dnNoteForm: {},
     dnHistFilter: "", dnHistOnlyProblems: false, dnBackfilling: false,
+    /* Taking a booking back off a job that it should never have gone to. */
+    unbookOpen: false, unbookForm: {}, unbookSaving: false,
     pick: { open: false, ctx: "", article: "", description: "", required: 0, holding: "Stock", search: "", save: true, current: "", line: null },
     where: { open: false, article: "" },
     projectOpen: false, projectForm: {}, projectHoldings: [],
@@ -5518,7 +5646,11 @@ document.addEventListener("alpine:init", () => {
     projectLines(pid) {
       const map = new Map();
       for (const m of this.movements) {
-        if (m.project_id !== pid || m.type !== "issue") continue;
+        /* "adjust" is how a booking made in error is taken back off a job.
+           It carries the job it is correcting, so it nets off the line here
+           rather than appearing as a separate phantom article. */
+        const isReversal = m.type === "adjust" && m.reverses_issue;
+        if (m.project_id !== pid || (m.type !== "issue" && !isReversal)) continue;
         if (this.isSuperseded(m)) continue;   // detached from any live article
         /* By article AND system: the same code booked off two systems is two
            lines on the job, which is how the cutting lists read. */
@@ -5528,16 +5660,18 @@ document.addEventListener("alpine:init", () => {
             article_ref: m.article_ref,
             description: m.description || "",
             system_ref: m.system_ref || "",
-            qty: 0, count: 0, last: null,
+            qty: 0, count: 0, last: null, returned: 0,
           });
         }
         const line = map.get(k);
-        line.qty += num(m.qty);
-        line.count++;
+        line.qty += isReversal ? -num(m.qty) : num(m.qty);
+        if (isReversal) line.returned += num(m.qty); else line.count++;
         const t = m.at && m.at.toDate ? m.at.toDate() : (m.at ? new Date(m.at) : null);
         if (t && (!line.last || t > line.last)) line.last = t;
       }
-      return [...map.values()].sort((a, b) =>
+      /* A line taken back in full nets to zero and leaves the job's list; the
+         ledger still holds both postings. */
+      return [...map.values()].filter((l) => l.qty > 0 || l.returned > 0).sort((a, b) =>
         String(a.article_ref).localeCompare(String(b.article_ref), undefined, { numeric: true }));
     },
     projectTotal(pid) {
@@ -6150,6 +6284,190 @@ document.addEventListener("alpine:init", () => {
     },
 
 
+
+    /* ---------------- taking a booking back off a job --------------------
+       Material booked to the wrong job, or to the right job as the wrong
+       article. The ledger cannot be rewritten, so the booking is corrected
+       by posting against it: an "adjust" that carries the job it reverses,
+       which nets the line off the job and puts the quantity back on the
+       stock line it came out of. Sending it somewhere else afterwards is an
+       ordinary transfer, posted in the same go.
+    -------------------------------------------------------------------- */
+    /* The stock lines a job's bookings for one article and system came out
+       of, newest first, with how much of each is still outstanding. */
+    unbookSources(pid, article, system) {
+      const k = squash(article) + "|" + squash(system);
+      const out = new Map();
+      for (const m of this.movements) {
+        if (m.project_id !== pid || !m.item_id) continue;
+        if (squash(m.article_ref) + "|" + squash(m.system_ref) !== k) continue;
+        const rev = m.type === "adjust" && m.reverses_issue;
+        if (m.type !== "issue" && !rev) continue;
+        if (!out.has(m.item_id)) out.set(m.item_id, { item_id: m.item_id, qty: 0, at: null });
+        const e = out.get(m.item_id);
+        e.qty += rev ? -num(m.qty) : num(m.qty);
+        const t = m.at && m.at.toDate ? m.at.toDate() : null;
+        if (t && (!e.at || t > e.at)) e.at = t;
+      }
+      return [...out.values()]
+        .filter((e) => e.qty > 0)
+        .map((e) => ({ ...e, item: this.inventory.find((i) => i.id === e.item_id) || null }))
+        .filter((e) => e.item)
+        .sort((a, b) => (b.at ? b.at.getTime() : 0) - (a.at ? a.at.getTime() : 0));
+    },
+
+    openUnbook(pid, article, system, description) {
+      const p = this.projects.find((x) => x.id === pid);
+      const sources = this.unbookSources(pid, article, system);
+      const most = sources.reduce((s, e) => s + e.qty, 0);
+      this.unbookForm = {
+        project_id: pid, project_code: p ? p.project_code : "",
+        article_ref: article, system_ref: system || "",
+        description: description || (sources[0] && sources[0].item.description) || "",
+        sources, most, qty: most,
+        /* Default: straight back where it came from, which restores exactly
+           the position before the booking. */
+        dest: sources.length ? this.holdingOf(sources[0].item) : "Stock",
+        from: sources.length ? this.holdingOf(sources[0].item) : "",
+        note: "",
+      };
+      this.unbookOpen = true;
+    },
+    /* Opening from a single ledger entry: same dialog, scoped to that posting. */
+    openUnbookFromMovement(m) {
+      if (!m || m.type !== "issue" || !m.project_id) return;
+      this.openUnbook(m.project_id, m.article_ref, m.system_ref, m.description);
+      if (this.unbookForm.most > num(m.qty)) this.unbookForm.qty = num(m.qty);
+    },
+    get unbookDestinations() {
+      const seen = new Map();
+      seen.set("stock", { value: "Stock", label: "Main stock" });
+      for (const h of this.holdings) {
+        if (key(h) === "stock") continue;
+        seen.set(key(h), { value: h, label: this.displayHolding(h) });
+      }
+      return [...seen.values()];
+    },
+    /* Returns "" when there is nothing to say, so the hint can be driven by
+       x-show without the template ever touching a null record. */
+    unbookPreview() {
+      const t = this.unbookTarget;
+      if (!t) return "";
+      const b = this.balanceOf(t);
+      return "The figure for this article and system under " +
+        this.displayHolding(this.holdingOf(t)) + " goes from " + this.fmt(b) +
+        " to " + this.fmt(b + num(this.unbookForm.qty)) + ".";
+    },
+    get unbookTarget() {
+      const f = this.unbookForm;
+      if (!f || !f.article_ref) return null;
+      const k = stockKey(f.article_ref, f.system_ref, f.dest);
+      return this.inventory.find((i) =>
+        stockKey(i.article_ref, i.system_ref, this.holdingOf(i)) === k) || null;
+    },
+
+    async saveUnbook() {
+      if (this.unbookSaving) return;
+      const f = this.unbookForm;
+      const want = num(f.qty);
+      if (!(want > 0)) { this.toast("Enter how many to take back.", "err"); return; }
+      if (want > f.most + 1e-9) {
+        this.toast("Only " + this.fmt(f.most) + " is booked to this job.", "err"); return;
+      }
+      const sameHolding = f.sources.length && key(f.dest) === key(this.holdingOf(f.sources[0].item));
+      if (!confirm(
+        "Take " + this.fmt(want) + " of " + f.article_ref + " back off " + f.project_code + "?\n\n" +
+        (sameHolding
+          ? "It goes back onto " + this.displayHolding(f.dest) + ", exactly where it came from."
+          : "It comes off " + this.displayHolding(f.from) + " and goes to " +
+            this.displayHolding(f.dest) + ".") +
+        "\n\nThe original booking stays in the ledger. This posts a correction against it, " +
+        "so both remain visible.")) return;
+
+      this.unbookSaving = true;
+      try {
+        const stamp = { updatedAt: serverTimestamp(), updatedBy: this.displayName };
+        const why = ["Booking reversed — " + f.project_code, f.note].filter(Boolean).join(": ");
+        const ops = [];
+        let left = want;
+
+        /* 1. Undo the consumption on each line it came out of, newest first. */
+        const used = [];
+        for (const s of f.sources) {
+          if (left <= 1e-9) break;
+          const take = Math.min(left, s.qty);
+          left -= take;
+          used.push({ s, take });
+          ops.push((b) => b.update(doc(db, collections.inventory, s.item_id), {
+            issued_qty: increment(-take), balance_stock_qty: increment(take), ...stamp,
+          }));
+          ops.push((b) => b.set(doc(collection(db, collections.movements)), {
+            item_id: s.item_id, article_ref: f.article_ref,
+            description: f.description || "", system_ref: f.system_ref || "",
+            holding: this.holdingOf(s.item),
+            type: "adjust", qty: take, reverses_issue: true,
+            project_id: f.project_id, project_code: f.project_code,
+            note: why, at: serverTimestamp(),
+            by: this.authUser.uid, by_name: this.displayName,
+          }));
+        }
+
+        /* 2. If it is to sit somewhere else, that is an ordinary transfer. */
+        if (!sameHolding) {
+          let target = this.unbookTarget;
+          let targetId = target ? target.id : null;
+          if (!targetId) {
+            const ref = doc(collection(db, collections.inventory));
+            targetId = ref.id;
+            const src = used[0] ? used[0].s.item : null;
+            ops.push((b) => b.set(ref, {
+              article_ref: f.article_ref, description: f.description || "",
+              system_ref: f.system_ref || "", holding: f.dest,
+              unit: (src && src.unit) || "", location: "", min_qty: 0,
+              pu_qty: src && this.puQty(src) > 1 ? this.puQty(src) : 1,
+              pack_unit: (src && this.packUnit(src)) || "PKT",
+              bar_length: (src && this.barLength(src)) || 0, on_order: 0,
+              received_qty: 0, issued_qty: 0, balance_stock_qty: 0,
+              createdAt: serverTimestamp(), createdBy: this.displayName, ...stamp,
+            }));
+          }
+          for (const { s, take } of used) {
+            const xid = doc(collection(db, collections.movements)).id;
+            const common = {
+              article_ref: f.article_ref, description: f.description || "",
+              system_ref: f.system_ref || "", type: "transfer", qty: take, transfer_id: xid,
+              project_id: "", project_code: "",
+              at: serverTimestamp(), by: this.authUser.uid, by_name: this.displayName,
+            };
+            ops.push((b) => b.update(doc(db, collections.inventory, s.item_id), {
+              received_qty: increment(-take), balance_stock_qty: increment(-take), ...stamp,
+            }));
+            ops.push((b) => b.update(doc(db, collections.inventory, targetId), {
+              received_qty: increment(take), balance_stock_qty: increment(take), ...stamp,
+            }));
+            ops.push((b) => b.set(doc(collection(db, collections.movements)), {
+              ...common, item_id: s.item_id, holding: this.holdingOf(s.item),
+              direction: "out", note: "Returned from " + f.project_code,
+            }));
+            ops.push((b) => b.set(doc(collection(db, collections.movements)), {
+              ...common, item_id: targetId, holding: f.dest,
+              direction: "in", note: "Returned from " + f.project_code,
+            }));
+          }
+        }
+
+        for (let i = 0; i < ops.length; i += 400) {
+          const batch = writeBatch(db);
+          for (const op of ops.slice(i, i + 400)) op(batch);
+          this.track(batch.commit(), "the correction");
+        }
+        this.unbookOpen = false;
+        this.toast(this.savedMsg("Took " + this.fmt(want) + " of " + f.article_ref +
+          " back off " + f.project_code + "."), "ok");
+      } catch (e) {
+        this.toast("Could not reverse that booking: " + e.message, "err");
+      } finally { this.unbookSaving = false; }
+    },
     /* ---------------- delivery note tracker ------------------------------
        One record per delivery note received, written as the note is posted.
        Unlike the ledger these records stay editable, because a short or
