@@ -469,7 +469,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
             posted on one device appears on every other device within a second.
           </p>
         </div>
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.43, 2026年10月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.44, 2026年10月 - アイカ 🤌🏽</p>
       </div>
     </div>
   </template>
@@ -1525,10 +1525,15 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                 <input type="checkbox" x-model="dnHistOnlyProblems">
                 <span>Only ones needing attention</span>
               </label>
-              <template x-if="dnBackfillPending.length">
-                <button class="btn btn-sm" @click="backfillDeliveryNotes()" :disabled="dnBackfilling">
+              <template x-if="dnBackfillPending.length || dnStale.length">
+                <button class="btn btn-sm" :class="dnStale.length ? 'btn-primary' : ''"
+                        @click="backfillDeliveryNotes()" :disabled="dnBackfilling">
                   <span x-show="dnBackfilling" class="spinner"></span>
-                  <span x-text="`Add ${fmt(dnBackfillPending.length)} past note(s) from the ledger`"></span>
+                  <span x-text="dnBackfillPending.length && dnStale.length
+                    ? `Add ${fmt(dnBackfillPending.length)} and correct ${fmt(dnStale.length)} from the ledger`
+                    : (dnStale.length
+                        ? `Correct ${fmt(dnStale.length)} note(s) against the ledger`
+                        : `Add ${fmt(dnBackfillPending.length)} past note(s) from the ledger`)"></span>
                 </button>
               </template>
             </div>
@@ -2322,7 +2327,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
           </div>
         </div>
 
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.43, 2026年10月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.44, 2026年10月 - アイカ 🤌🏽</p>
       </div><!-- /view -->
     </main>
   </div>
@@ -6302,20 +6307,57 @@ document.addEventListener("alpine:init", () => {
       })).sort((a, b) => String(b.when).localeCompare(String(a.when)));
     },
     get dnBackfillPending() { return this.dnReconstructed.filter((g) => !g.known); },
+    /* Records whose figures no longer match the ledger. This happens when the
+       rebuild runs while the device is still catching up on a large change —
+       after a bulk tidy-up of the ledger, say, where the local copy can hold
+       entries the server has already dropped. Re-running puts them right. */
+    get dnStale() {
+      const byRef = new Map(this.dnReconstructed.map((g) => [squash(g.ref), g]));
+      const out = [];
+      for (const r of this.deliveryNotes) {
+        if (r.source !== "rebuilt from the ledger") continue;   // uploads keep their own figures
+        const g = byRef.get(squash(r.ref));
+        if (!g) continue;
+        if (num(r.lineCount) !== g.lineCount ||
+            Math.round(num(r.totalUnits)) !== Math.round(g.totalUnits)) out.push({ rec: r, g });
+      }
+      return out;
+    },
 
     async backfillDeliveryNotes() {
       if (this.dnBackfilling) return;
       const pending = this.dnBackfillPending;
-      if (!pending.length) { this.toast("Every delivery note in the ledger is already tracked.", "ok"); return; }
+      const stale = this.dnStale;
+      if (!pending.length && !stale.length) {
+        this.toast("Every delivery note in the ledger is tracked, and the figures match.", "ok"); return;
+      }
+      const parts = [];
+      if (pending.length) parts.push("Add " + pending.length + " delivery note(s) to the tracker");
+      if (stale.length) parts.push("correct the figures on " + stale.length + " that no longer match the ledger");
       if (!confirm(
-        "Add " + pending.length + " delivery note(s) to the tracker, rebuilt from the ledger?\n\n" +
-        "Each one gets its reference, the date it was posted, who posted it, how many lines and " +
-        "how many units.\n\nNothing in the ledger is changed, and no stock moves. You can edit or " +
-        "remove any of them afterwards.")) return;
+        parts.join(", and ") + "?\n\n" +
+        (pending.length ? "New ones get their reference, the date posted, who posted it, how many " +
+                          "lines and how many units.\n\n" : "") +
+        (stale.length ? "Corrections only touch the line and unit counts. Your status and comments " +
+                        "are left exactly as they are.\n\n" : "") +
+        "Nothing in the ledger is changed, and no stock moves.")) return;
 
       this.dnBackfilling = true;
       try {
         const coll = collections.deliveryNotes || "deliveryNotes";
+        /* Put the stale ones right first, so the figures are correct even if
+           the run is interrupted part way through adding new ones. */
+        for (let i = 0; i < stale.length; i += 200) {
+          const batch = writeBatch(db);
+          for (const { rec, g } of stale.slice(i, i + 200)) {
+            batch.update(doc(db, coll, rec.id), {
+              lineCount: g.lineCount, totalUnits: g.totalUnits,
+              destinations: g.destinations,
+              updatedAt: serverTimestamp(), updatedBy: this.displayName,
+            });
+          }
+          this.track(batch.commit(), "the corrected figures");
+        }
         for (let i = 0; i < pending.length; i += 200) {
           const batch = writeBatch(db);
           for (const g of pending.slice(i, i + 200)) {
@@ -6333,7 +6375,10 @@ document.addEventListener("alpine:init", () => {
           }
           this.track(batch.commit(), "the rebuilt delivery notes");
         }
-        this.toast("Added " + pending.length + " delivery note(s) to the tracker.", "ok");
+        const said = [];
+        if (pending.length) said.push("added " + pending.length);
+        if (stale.length) said.push("corrected " + stale.length);
+        this.toast("Delivery notes: " + said.join(", ") + ".", "ok");
       } finally { this.dnBackfilling = false; }
     },
 
