@@ -469,7 +469,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
             posted on one device appears on every other device within a second.
           </p>
         </div>
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.23, 2026年10月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.43, 2026年10月 - アイカ 🤌🏽</p>
       </div>
     </div>
   </template>
@@ -1280,17 +1280,37 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
           <div class="view-head">
             <div>
               <h2 class="view-title">Delivery Note</h2>
-              <p class="view-sub">Upload the supplier's delivery note and book the whole delivery in at once.</p>
+              <p class="view-sub" x-text="dnView === 'receive'
+                ? 'Upload the supplier\u2019s delivery note and book the whole delivery in at once.'
+                : 'Every delivery note received, and what was wrong with it.'"></p>
             </div>
             <div class="actions">
-              <label class="btn btn-sm btn-primary" style="cursor:pointer">
-                <span x-show="dnBusy" class="spinner"></span>
-                <span x-text="dn.lines.length ? 'Choose another note' : 'Choose delivery note'"></span>
-                <input type="file" accept=".pdf,application/pdf" style="display:none" @change="readDeliveryNote($event)">
-              </label>
-              <button class="btn btn-sm" x-show="dn.lines.length" @click="clearDn()">Clear</button>
+              <!-- Receiving a note and reviewing the ones already in are two
+                   different jobs, so they get two views rather than one long page. -->
+              <div class="seg">
+                <button :class="dnView === 'receive' && 'on'"
+                        @click="dnView = 'receive'">Receive a note</button>
+                <button :class="dnView === 'history' && 'on'" @click="dnView = 'history'">
+                  <span>History</span>
+                  <span class="pill pill-warn" style="margin-left:.35rem" x-show="dnProblemCount"
+                        x-text="fmt(dnProblemCount)"></span>
+                </button>
+              </div>
+              <template x-if="dnView === 'receive'">
+                <label class="btn btn-sm btn-primary" style="cursor:pointer">
+                  <span x-show="dnBusy" class="spinner"></span>
+                  <span x-text="dn.lines.length ? 'Choose another note' : 'Choose delivery note'"></span>
+                  <input type="file" accept=".pdf,application/pdf" style="display:none" @change="readDeliveryNote($event)">
+                </label>
+              </template>
+              <button class="btn btn-sm" x-show="dnView === 'receive' && dn.lines.length" @click="clearDn()">Clear</button>
+              <template x-if="dnView === 'history'">
+                <button class="btn btn-sm" @click="exportDeliveryNotes()" :disabled="!dnHistory.length">Export CSV</button>
+              </template>
             </div>
           </div>
+
+          <div x-show="dnView === 'receive'" class="stack">
 
           <template x-if="!dn.lines.length">
             <div class="card empty">
@@ -1493,6 +1513,92 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
               </div>
             </div>
           </template>
+          </div>
+
+          <!-- ============ DELIVERY NOTE HISTORY ============ -->
+          <div x-show="dnView === 'history'" class="stack">
+            <div class="row" style="gap:.75rem;flex-wrap:wrap;align-items:center">
+              <input class="input" style="flex:1;min-width:220px" x-model.trim="dnHistFilter"
+                     placeholder="Find a note by reference, comment or who received it"
+                     aria-label="Search delivery notes">
+              <label class="row" style="gap:.4rem;cursor:pointer;white-space:nowrap">
+                <input type="checkbox" x-model="dnHistOnlyProblems">
+                <span>Only ones needing attention</span>
+              </label>
+              <template x-if="dnBackfillPending.length">
+                <button class="btn btn-sm" @click="backfillDeliveryNotes()" :disabled="dnBackfilling">
+                  <span x-show="dnBackfilling" class="spinner"></span>
+                  <span x-text="`Add ${fmt(dnBackfillPending.length)} past note(s) from the ledger`"></span>
+                </button>
+              </template>
+            </div>
+
+            <template x-if="!dnHistory.length">
+              <div class="card empty">
+                <div class="empty-title" x-text="deliveryNotes.length ? 'Nothing matches' : 'No delivery notes tracked yet'"></div>
+                <div style="max-width:58ch;margin-inline:auto"
+                     x-text="deliveryNotes.length
+                       ? 'No note matches what you typed, or none is marked as needing attention.'
+                       : 'Every note received from now on is recorded here. The ones already received can be rebuilt from the ledger.'"></div>
+                <template x-if="!deliveryNotes.length && dnBackfillPending.length">
+                  <button class="btn btn-primary" style="margin-top:1rem" @click="backfillDeliveryNotes()"
+                          :disabled="dnBackfilling"
+                          x-text="`Rebuild ${fmt(dnBackfillPending.length)} past note(s) from the ledger`"></button>
+                </template>
+              </div>
+            </template>
+
+            <template x-if="dnHistory.length">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr>
+                    <th>Reference</th><th>Received</th><th>By</th>
+                    <th class="right">Lines</th><th class="right">Units</th>
+                    <th>Status</th><th>Comments</th><th class="right col-actions">Actions</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="r in dnHistory" :key="r.id">
+                      <tr :style="dnNeedsAttention(r) ? 'background:rgba(245,158,11,.06)' : ''">
+                        <td class="mono" style="font-weight:700;color:var(--accent);vertical-align:top">
+                          <div x-text="r.ref || '\u2014'"></div>
+                          <div class="faint" style="font-size:.72rem" x-show="r.custRef" x-text="r.custRef"></div>
+                        </td>
+                        <td style="vertical-align:top;white-space:nowrap">
+                          <div x-text="dnWhen(r) || '\u2014'"></div>
+                          <div class="faint" style="font-size:.72rem" x-show="r.dated"
+                               x-text="'note dated ' + r.dated"></div>
+                        </td>
+                        <td style="vertical-align:top" x-text="r.by_name || '\u2014'"></td>
+                        <td class="right num" style="vertical-align:top" x-text="fmt(r.lineCount)"></td>
+                        <td class="right num" style="vertical-align:top" x-text="fmt(r.totalUnits)"></td>
+                        <td style="vertical-align:top">
+                          <span class="pill" :class="dnStatusClass(r.status)" x-text="dnStatusLabel(r.status)"></span>
+                          <!-- A bulk note can touch dozens of holdings, which would
+                               swamp the row, so name a few and count the rest. -->
+                          <div class="faint" style="font-size:.72rem;margin-top:.2rem"
+                               x-show="(r.destinations || []).length"
+                               x-text="dnDestShort(r.destinations)"></div>
+                        </td>
+                        <td style="vertical-align:top;max-width:34ch">
+                          <span x-show="r.comments" x-text="r.comments"></span>
+                          <span class="faint" x-show="!r.comments">&mdash;</span>
+                          <div class="faint" style="font-size:.72rem" x-show="r.source === 'rebuilt from the ledger'">rebuilt from the ledger</div>
+                        </td>
+                        <td class="right col-actions" style="vertical-align:top">
+                          <button class="btn btn-sm btn-ghost" @click="openDnNote(r)">Open</button>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+
+            <p class="hint" x-show="dnHistory.length"
+               x-text="`${fmt(dnHistory.length)} of ${fmt(deliveryNotes.length)} note(s)` +
+                       (dnProblemCount ? ` \u2014 ${fmt(dnProblemCount)} need attention.` : '.') +
+                       ' Open a note to set its status or add a comment.'"></p>
+          </div>
         </div>
 
         <!-- ============ MTO IMPORT ============ -->
@@ -2216,7 +2322,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
           </div>
         </div>
 
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.23, 2026年10月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.43, 2026年10月 - アイカ 🤌🏽</p>
       </div><!-- /view -->
     </main>
   </div>
@@ -2808,6 +2914,94 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
           <button type="button" class="btn" x-show="pick.current" @click="applySubstitute('')" style="margin-right:auto">Stop substituting</button>
           <button type="button" class="btn" @click="pick.open=false">Cancel</button>
         </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ===================== DELIVERY NOTE MODAL ===================== -->
+  <template x-if="dnNoteOpen">
+    <div class="backdrop" @click.self="dnNoteOpen=false" @keydown.escape.window="dnNoteOpen=false">
+      <div class="modal" style="max-width:640px">
+        <form @submit.prevent="saveDnNote()">
+          <div class="modal-head">
+            <h3 x-text="'Delivery note ' + (dnNoteForm.ref || '')"></h3>
+            <button type="button" class="btn btn-sm btn-ghost" @click="dnNoteOpen=false">Close</button>
+          </div>
+          <div class="modal-body">
+            <!-- What was recorded when the note was received. Read only: it is
+                 what happened, and the ledger entries behind it cannot change. -->
+            <div class="card" style="padding:.75rem">
+              <div class="grid-2">
+                <div>
+                  <div class="label">Received</div>
+                  <div x-text="dnNoteForm.when || '—'"></div>
+                </div>
+                <div>
+                  <div class="label">Received by</div>
+                  <div x-text="dnNoteForm.by_name || '—'"></div>
+                </div>
+                <div>
+                  <div class="label">Lines</div>
+                  <div class="num" x-text="fmt(dnNoteForm.lineCount)"></div>
+                </div>
+                <div>
+                  <div class="label">Units booked in</div>
+                  <div class="num" x-text="fmt(dnNoteForm.totalUnits)"></div>
+                </div>
+                <div x-show="dnNoteForm.dated">
+                  <div class="label">Date on the note</div>
+                  <div x-text="dnNoteForm.dated"></div>
+                </div>
+                <div x-show="dnNoteForm.custRef">
+                  <div class="label">Customer reference</div>
+                  <div x-text="dnNoteForm.custRef"></div>
+                </div>
+              </div>
+              <div style="margin-top:.5rem" x-show="(dnNoteForm.destinations || []).length">
+                <div class="label">Delivered to</div>
+                <div x-text="(dnNoteForm.destinations || []).join(', ')"></div>
+              </div>
+              <p class="hint" style="margin:.5rem 0 0" x-show="dnNoteForm.source === 'rebuilt from the ledger'">
+                Rebuilt from the ledger, so the date is when it was posted rather than when the
+                lorry arrived, and the note's own date was not recorded at the time.
+              </p>
+            </div>
+
+            <div class="field">
+              <label class="label">Status</label>
+              <select class="select" x-model="dnNoteForm.status">
+                <template x-for="s in dnStatusList" :key="s">
+                  <option :value="s" x-text="dnStatusLabel(s)" :selected="s === dnNoteForm.status"></option>
+                </template>
+              </select>
+              <span class="hint">Mark it short, damaged or disputed and it shows up in the count on the
+                History button until somebody sets it to resolved.</span>
+            </div>
+
+            <div class="field">
+              <label class="label">Comments</label>
+              <textarea class="textarea" rows="4" x-model.trim="dnNoteForm.comments"
+                        placeholder="e.g. 3 bars of 224690 missing, supplier notified 21/10. Two lengths of 236217 bent in transit, credit requested."></textarea>
+              <span class="hint">What was wrong, what you did about it, and where it stands. This is the
+                part people read months later, so write it for them.</span>
+            </div>
+
+            <div class="banner banner-info">
+              <div>
+                <strong>Editing this changes nothing in stock.</strong>
+                <span>The quantities this note booked in are already in the ledger and cannot be altered.
+                  If material never arrived, correct the stock by issuing it out with a note saying why.</span>
+              </div>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn btn-ghost" @click="deleteDnNote()" style="margin-right:auto">Remove</button>
+            <button type="button" class="btn" @click="dnNoteOpen=false">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="saving">
+              <span x-show="saving" class="spinner"></span><span>Save</span>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   </template>
@@ -3864,6 +4058,10 @@ document.addEventListener("alpine:init", () => {
     xferOpen: false, xferForm: {}, xferSystemNew: false,
     leftoverVilla: "ALL", leftoverDoneOnly: false, leftoverSel: {}, wipeBoms: false,
     substitutes: [], subOpen: false, subForm: { subs: [] },
+    /* Delivery note tracker. dnView switches the Delivery Note page between
+       receiving a new note and reviewing the ones already received. */
+    deliveryNotes: [], dnView: "receive", dnNoteOpen: false, dnNoteForm: {},
+    dnHistFilter: "", dnHistOnlyProblems: false, dnBackfilling: false,
     pick: { open: false, ctx: "", article: "", description: "", required: 0, holding: "Stock", search: "", save: true, current: "", line: null },
     where: { open: false, article: "" },
     projectOpen: false, projectForm: {}, projectHoldings: [],
@@ -4574,6 +4772,19 @@ document.addEventListener("alpine:init", () => {
             { [this.dn.tag]: new Date().toISOString() }, { merge: true }), "the import record");
         }
 
+        /* Keep a record of the note itself, so it can be reviewed later and
+           commented on if something turns out to be short or damaged. */
+        this.recordDeliveryNote({
+          ref: this.dn.ref || this.dn.fileName,
+          dated: this.dn.dated || "",
+          custRef: this.dn.custRef || "",
+          fileName: this.dn.fileName || "",
+          lineCount: entries.length,
+          totalUnits: this.dnTotalUnits,
+          destinations: [...new Set(this.dnActive.map((l) => l.dest || "Stock"))],
+          source: "upload",
+        });
+
         const n = entries.length, units = this.dnTotalUnits;
         this.toast(this.savedMsg("Delivery received \u2014 " + this.fmt(units) + " units across " +
                    n + " stock line(s)" + (made ? ", " + made + " created" : "") + "."), "ok");
@@ -5046,6 +5257,7 @@ document.addEventListener("alpine:init", () => {
       this._unsubs.forEach((fn) => { try { fn(); } catch (e) {} });
       this._unsubs = [];
       this.inventory = []; this.movements = []; this.projects = []; this.boms = []; this.substitutes = [];
+      this.deliveryNotes = [];
     },
 
     subscribe(user) {
@@ -5077,6 +5289,8 @@ document.addEventListener("alpine:init", () => {
       bind("projects", "projects", collection(db, collections.projects));
       bind("BOM templates", "boms", collection(db, collections.boms));
       bind("substitutes", "substitutes", collection(db, collections.substitutes || "substitutes"));
+      bind("delivery notes", "deliveryNotes",
+        collection(db, collections.deliveryNotes || "deliveryNotes"));
       /* The whole ledger, newest first. Villa Project totals are summed from
          these rows, so a window would silently under-report every project.
          Firestore keeps its own local copy, so this is one download, not one
@@ -5349,7 +5563,8 @@ document.addEventListener("alpine:init", () => {
                    this.fmt(this.projects.length) + " job(s)" +
                    (boms.length ? " and " + this.fmt(boms.length) + " BOM template(s)" : "") + "?\n\n" +
                    (this.wipeBoms ? "" : "BOM templates are kept. ") +
-                   "The movement ledger and the substitutes register are kept. This cannot be undone.")) return;
+                   "The movement ledger, the substitutes register and the delivery note tracker " +
+                   "are kept. This cannot be undone.")) return;
       const typed = prompt('Type DELETE to confirm.');
       if (String(typed || "").trim().toUpperCase() !== "DELETE") {
         this.toast("Nothing was deleted.", "ok"); return;
@@ -5929,6 +6144,209 @@ document.addEventListener("alpine:init", () => {
       this.xferForm.note = "Not needed for " + this.holdingOf(item);
     },
 
+
+    /* ---------------- delivery note tracker ------------------------------
+       One record per delivery note received, written as the note is posted.
+       Unlike the ledger these records stay editable, because a short or
+       damaged delivery is usually only discovered after the stock has been
+       booked in. The movements the note created are untouched either way.
+    -------------------------------------------------------------------- */
+    dnStatusList: ["received", "short", "damaged", "disputed", "resolved"],
+    dnStatusLabel(s) {
+      return ({ received: "received in full", short: "short delivery", damaged: "damaged",
+                disputed: "disputed", resolved: "resolved" })[key(s)] || "received in full";
+    },
+    dnStatusClass(s) {
+      const k = key(s);
+      if (k === "short" || k === "disputed") return "pill-warn";
+      if (k === "damaged") return "pill-bad";
+      if (k === "resolved") return "pill-info";
+      return "pill-good";
+    },
+    /* Anything that is not a plain "received in full" wants somebody's attention. */
+    dnNeedsAttention(r) {
+      return !!r && ["short", "damaged", "disputed"].includes(key(r.status));
+    },
+    get dnProblemCount() { return this.deliveryNotes.filter((r) => this.dnNeedsAttention(r)).length; },
+
+    /* A delivery can be split across many holdings. Naming all of them makes
+       the row unreadable, so name three and count the rest. */
+    dnDestShort(list) {
+      const d = (list || []).filter(Boolean);
+      if (!d.length) return "";
+      /* Holdings are named "Villa 24, Street 4, Savannah A", commas and all,
+         so they are separated with a dot rather than another comma. */
+      if (d.length <= 3) return d.join("  ·  ");
+      return d.slice(0, 3).join("  ·  ") + "  ·  and " + (d.length - 3) + " more";
+    },
+    dnWhen(r) {
+      const v = r && (r.receivedAt || r.uploadedAt);
+      if (!v) return "";
+      const d = v.toDate ? v.toDate() : new Date(v);
+      return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+    },
+    get dnHistory() {
+      /* Its own box rather than the global search, which jumps you to the
+         stock list the moment you type in it. */
+      const q = key(this.dnHistFilter);
+      return this.deliveryNotes
+        .filter((r) => {
+          if (this.dnHistOnlyProblems && !this.dnNeedsAttention(r)) return false;
+          if (!q) return true;
+          return [r.ref, r.custRef, r.dated, r.by_name, r.comments, this.dnStatusLabel(r.status),
+                  (r.destinations || []).join(" ")]
+            .map((v) => String(v ?? "")).join(" ").toLowerCase().includes(q);
+        })
+        .sort((a, b) => String(this.dnWhen(b)).localeCompare(String(this.dnWhen(a)))
+                     || String(a.ref).localeCompare(String(b.ref)));
+    },
+
+    openDnNote(r) {
+      this.dnNoteForm = {
+        id: r.id, ref: r.ref || "", dated: r.dated || "", custRef: r.custRef || "",
+        status: r.status || "received", comments: r.comments || "",
+        lineCount: r.lineCount || 0, totalUnits: r.totalUnits || 0,
+        by_name: r.by_name || "", when: this.dnWhen(r),
+        destinations: r.destinations || [], source: r.source || "",
+      };
+      this.dnNoteOpen = true;
+    },
+    async saveDnNote() {
+      if (this.saving) return;
+      const f = this.dnNoteForm;
+      if (!f.id) { this.dnNoteOpen = false; return; }
+      this.saving = true;
+      try {
+        this.track(updateDoc(doc(db, collections.deliveryNotes || "deliveryNotes", f.id), {
+          status: f.status || "received",
+          comments: String(f.comments || "").trim(),
+          updatedAt: serverTimestamp(), updatedBy: this.displayName,
+        }), "the delivery note");
+        this.dnNoteOpen = false;
+        this.toast("Saved " + (f.ref || "the delivery note") + ".", "ok");
+      } finally { this.saving = false; }
+    },
+    deleteDnNote() {
+      const f = this.dnNoteForm;
+      if (!f.id) return;
+      if (!confirm("Remove " + (f.ref || "this note") + " from the tracker?\n\n" +
+        "This only removes the tracker record. The stock it booked in stays exactly as it is, " +
+        "and the ledger entries it created cannot be removed by anyone.")) return;
+      this.track(deleteDoc(doc(db, collections.deliveryNotes || "deliveryNotes", f.id)), "the removal");
+      this.dnNoteOpen = false;
+    },
+
+    /* Written as a delivery note is posted. Keyed on the reference so posting
+       the same note twice updates one record instead of making a second. */
+    dnRecordFor(ref) {
+      const k = squash(ref);
+      return this.deliveryNotes.find((r) => squash(r.ref) === k) || null;
+    },
+    recordDeliveryNote(info) {
+      const coll = collections.deliveryNotes || "deliveryNotes";
+      const existing = this.dnRecordFor(info.ref);
+      const base = {
+        ref: info.ref, dated: info.dated || "", custRef: info.custRef || "",
+        fileName: info.fileName || "", lineCount: info.lineCount || 0,
+        totalUnits: info.totalUnits || 0, destinations: info.destinations || [],
+        source: info.source || "upload",
+        updatedAt: serverTimestamp(), updatedBy: this.displayName,
+      };
+      if (existing) {
+        this.track(updateDoc(doc(db, coll, existing.id), base), "the delivery note record");
+      } else {
+        this.track(setDoc(doc(collection(db, coll)), {
+          ...base, status: "received", comments: "",
+          receivedAt: serverTimestamp(), by: this.authUser.uid, by_name: this.displayName,
+          createdAt: serverTimestamp(), createdBy: this.displayName,
+        }), "the delivery note record");
+      }
+    },
+
+    /* ---- one-off: rebuild the history from the ledger ----
+       Every delivery ever posted wrote its reference into the note on each
+       movement, as "DN <ref>", so the past can be reconstructed without
+       reading anything new — the ledger is already in memory. */
+    get dnReconstructed() {
+      const out = new Map();
+      for (const m of this.movements) {
+        const raw = String(m.note ?? "");
+        if (!/^DN\s/i.test(raw)) continue;
+        /* Strip the " - for <project>" the poster appends, then take the part
+           before any free-text note the person typed. */
+        const body = raw.replace(/\s+—\s+for\s+.*$/i, "").replace(/^DN\s+/i, "").trim();
+        const ref = body.split("—")[0].trim();
+        if (!ref) continue;
+        const k = squash(ref);
+        if (!out.has(k)) {
+          out.set(k, { ref, lineCount: 0, totalUnits: 0, dests: new Set(),
+                       who: "", when: "", comments: "" });
+        }
+        const g = out.get(k);
+        g.lineCount++;
+        g.totalUnits += num(m.qty);
+        if (m.holding) g.dests.add(m.holding);
+        if (!g.who && m.by_name) g.who = m.by_name;
+        const when = m.at && m.at.toDate ? m.at.toDate() : null;
+        if (when) {
+          const iso = when.toISOString();
+          if (!g.when || iso < g.when) g.when = iso;   // earliest posting wins
+        }
+        /* Anything the person typed after the reference is worth keeping. */
+        const tail = body.split("—").slice(1).join("—").trim();
+        if (tail && !g.comments) g.comments = tail;
+      }
+      return [...out.values()].map((g) => ({
+        ...g, destinations: [...g.dests],
+        known: !!this.dnRecordFor(g.ref),
+      })).sort((a, b) => String(b.when).localeCompare(String(a.when)));
+    },
+    get dnBackfillPending() { return this.dnReconstructed.filter((g) => !g.known); },
+
+    async backfillDeliveryNotes() {
+      if (this.dnBackfilling) return;
+      const pending = this.dnBackfillPending;
+      if (!pending.length) { this.toast("Every delivery note in the ledger is already tracked.", "ok"); return; }
+      if (!confirm(
+        "Add " + pending.length + " delivery note(s) to the tracker, rebuilt from the ledger?\n\n" +
+        "Each one gets its reference, the date it was posted, who posted it, how many lines and " +
+        "how many units.\n\nNothing in the ledger is changed, and no stock moves. You can edit or " +
+        "remove any of them afterwards.")) return;
+
+      this.dnBackfilling = true;
+      try {
+        const coll = collections.deliveryNotes || "deliveryNotes";
+        for (let i = 0; i < pending.length; i += 200) {
+          const batch = writeBatch(db);
+          for (const g of pending.slice(i, i + 200)) {
+            batch.set(doc(collection(db, coll)), {
+              ref: g.ref, dated: "", custRef: "", fileName: "",
+              lineCount: g.lineCount, totalUnits: g.totalUnits,
+              destinations: g.destinations,
+              status: "received", comments: g.comments || "",
+              source: "rebuilt from the ledger",
+              receivedAt: g.when ? new Date(g.when) : serverTimestamp(),
+              by: "", by_name: g.who || "",
+              createdAt: serverTimestamp(), createdBy: this.displayName,
+              updatedAt: serverTimestamp(), updatedBy: this.displayName,
+            });
+          }
+          this.track(batch.commit(), "the rebuilt delivery notes");
+        }
+        this.toast("Added " + pending.length + " delivery note(s) to the tracker.", "ok");
+      } finally { this.dnBackfilling = false; }
+    },
+
+    exportDeliveryNotes() {
+      const rows = [["ref", "status", "received_on", "received_by", "note_dated", "customer_ref",
+                     "lines", "units", "destinations", "comments", "source"]];
+      for (const r of this.dnHistory) {
+        rows.push([r.ref || "", this.dnStatusLabel(r.status), this.dnWhen(r), r.by_name || "",
+                   r.dated || "", r.custRef || "", num(r.lineCount), num(r.totalUnits),
+                   (r.destinations || []).join(" / "), r.comments || "", r.source || ""]);
+      }
+      downloadCsv(rows, "eurolux-delivery-notes-" + new Date().toISOString().slice(0, 10) + ".csv");
+    },
     /* ---------------- villa leftovers ------------------------------------
        Material bought for a villa that was never issued. While the villa is
        running it stays reserved; once it is finished the leftovers go back to

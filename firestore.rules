@@ -40,6 +40,15 @@ service cloud.firestore {
       allow read, write: if signedIn();
     }
 
+    // Delivery note tracker: one record per note received, with the comments
+    // and status staff add afterwards. Deliberately NOT append-only — a short
+    // or damaged delivery is often only discovered days later, so these have
+    // to stay editable. The stock movements the note created are still in the
+    // ledger and still cannot be touched.
+    match /deliveryNotes/{docId} {
+      allow read, write: if signedIn();
+    }
+
     // Shared app settings (default reorder threshold).
     match /settings/{docId} {
       allow read, write: if signedIn();

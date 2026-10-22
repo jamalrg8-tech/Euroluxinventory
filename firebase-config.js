@@ -85,4 +85,5 @@ export const collections = {
   users: "users",
   settings: "settings",
   substitutes: "substitutes",
+  deliveryNotes: "deliveryNotes",
 };
