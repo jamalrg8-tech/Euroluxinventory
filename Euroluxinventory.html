@@ -469,7 +469,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
             posted on one device appears on every other device within a second.
           </p>
         </div>
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.46, 2026年11月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.47, 2026年11月 - アイカ 🤌🏽</p>
       </div>
     </div>
   </template>
@@ -1710,12 +1710,15 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                     </div>
                     <div class="field">
                       <label class="label">Draw from *</label>
-                      <select id="mto-holding" class="select" x-model="mto.holding">
+                      <select id="mto-holding" class="select" x-model="mto.holding"
+                              @change="mtoResolveSources()">
                         <option value="Stock">Main stock</option>
                         <template x-for="h in holdings.filter(x => x !== 'Stock')" :key="h">
-                          <option :value="h" x-text="'Allocated to ' + h"></option>
+                          <option :value="h" x-text="'Allocated to ' + displayHolding(h)"></option>
                         </template>
                       </select>
+                      <span class="hint">Where to look first. A line this holding cannot cover
+                        falls back to main stock, then to a villa that has finished with it.</span>
                     </div>
                   </div>
                   <div class="grid-2">
@@ -1784,7 +1787,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                       <th class="right">MTO qty</th><th class="right">PU</th>
                       <th class="right">Required</th><th>Unit</th>
                       <th class="right">Deduct</th><th class="right">On hand</th>
-                      <th class="right">After</th><th>Stock list</th>
+                      <th class="right">After</th><th>Comes off</th><th>Stock list</th>
                     </tr></thead>
                     <tbody>
                       <template x-for="l in mtoVisible" :key="l.rid ?? (l.art + l.sec)">
@@ -1804,15 +1807,30 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                                    style="max-width:110px;margin-left:auto"
                                    :value="l.deduct" @input="l.deduct = num($event.target.value)">
                           </td>
-                          <td class="right num" x-text="mtoItem(mtoArt(l)) ? fmt(balanceOf(mtoItem(mtoArt(l)))) : '—'"></td>
+                          <td class="right num" x-text="mtoItemFor(l) ? fmt(balanceOf(mtoItemFor(l))) : '—'"></td>
                           <td class="right num" style="font-weight:700"
                               :style="mtoAfter(l) < 0 ? 'color:var(--bad);font-weight:700' : 'font-weight:700'"
                               x-text="fmt(mtoAfter(l))"></td>
+                          <!-- Where this line's material is actually coming off. -->
+                          <td style="max-width:220px">
+                            <div class="row" style="gap:.35rem;flex-wrap:nowrap">
+                              <button type="button" class="linkish truncate" style="max-width:130px;text-align:left"
+                                      @click="openMtoSource(l)"
+                                      :title="'Change where ' + mtoArt(l) + ' comes from'"
+                                      x-text="displayHolding(mtoSrcOf(l))"></button>
+                              <span class="pill" :class="mtoKindClass(mtoSrcKind(l))"
+                                    x-show="mtoSrcKind(l) !== 'own'"
+                                    x-text="mtoSrcKind(l) === 'reserved' ? 'booked' :
+                                            (mtoSrcKind(l) === 'leftover' ? 'leftover' : 'free')"></span>
+                              <span class="faint" style="font-size:.7rem" x-show="l.srcLocked"
+                                    title="You set this by hand">set</span>
+                            </div>
+                          </td>
                           <td>
                             <div class="row" style="gap:.35rem;flex-wrap:nowrap">
-                              <span class="pill" :class="l.sub ? 'pill-info' : (mtoItem(mtoArt(l)) ? 'pill-good' : 'pill-warn')"
-                                    x-text="l.sub ? 'substitute' : (mtoItem(mtoArt(l)) ? 'known' : 'not in stock list')"></span>
-                              <button type="button" class="btn btn-sm" x-show="l.sub || !mtoItem(mtoArt(l)) || mtoAfter(l) < 0"
+                              <span class="pill" :class="l.sub ? 'pill-info' : (mtoKnownAnywhere(l) ? 'pill-good' : 'pill-warn')"
+                                    x-text="l.sub ? 'substitute' : (mtoKnownAnywhere(l) ? 'known' : 'not in stock list')"></span>
+                              <button type="button" class="btn btn-sm" x-show="l.sub || !mtoKnownAnywhere(l) || mtoAfter(l) < 0"
                                       @click="openPick('mto', l)" x-text="l.sub ? 'Change' : 'Substitute\u2026'"></button>
                             </div>
                           </td>
@@ -2348,7 +2366,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
           </div>
         </div>
 
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.46, 2026年11月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.47, 2026年11月 - アイカ 🤌🏽</p>
       </div><!-- /view -->
     </main>
   </div>
@@ -2877,6 +2895,59 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  </template>
+
+  <!-- ===================== WHERE DOES THIS COME FROM MODAL ===================== -->
+  <template x-if="mtoSrc.open">
+    <div class="backdrop" @click.self="mtoSrc.open=false" @keydown.escape.window="mtoSrc.open=false">
+      <div class="modal" style="max-width:720px">
+        <div class="modal-head">
+          <h3 x-text="'Where should ' + mtoSrc.art + ' come from?'"></h3>
+          <button class="btn btn-sm btn-ghost" @click="mtoSrc.open=false">Close</button>
+        </div>
+        <div class="modal-body">
+          <p class="muted" style="margin:0">
+            <span x-text="mtoSrc.desc"></span>
+            <span class="faint" x-text="' — ' + fmt(mtoSrc.need) + ' needed for this job.'"></span>
+          </p>
+
+          <template x-if="!mtoSrc.options.length">
+            <p class="hint" style="margin:0">This article is not on the stock list anywhere. Posting the
+              MTO creates it and lets it go negative, or use Substitute to put something else in.</p>
+          </template>
+
+          <template x-for="o in mtoSrc.options" :key="o.holding">
+            <div class="pick-row">
+              <div class="grow">
+                <span style="font-weight:600" x-text="displayHolding(o.holding)"></span>
+                <div class="faint" style="font-size:.75rem" x-text="o.label"></div>
+              </div>
+              <!-- Enough, some, or none: the colour says it before the number does. -->
+              <span class="pill" :class="o.balance >= mtoSrc.need ? 'pill-good'
+                                        : (o.balance > 0 ? 'pill-warn' : 'pill-mute')"
+                    x-text="fmt(o.balance) + ' on hand'"></span>
+              <span class="pill pill-bad" x-show="o.kind === 'reserved'">booked</span>
+              <button class="btn btn-sm" :class="o.kind === 'reserved' ? '' : 'btn-primary'"
+                      x-show="key(o.holding) !== key(mtoSrc.current)"
+                      @click="chooseMtoSource(o.holding, o.kind)">Use this</button>
+              <span class="pill pill-info" x-show="key(o.holding) === key(mtoSrc.current)">in use</span>
+            </div>
+          </template>
+
+          <div class="banner banner-warn" x-show="mtoSrc.options.some(o => o.kind === 'reserved')">
+            <div>
+              <strong>Some of this is booked to another job.</strong>
+              <span>Material held under a villa that is still running was bought for that villa.
+                You can take it, but you will be asked to confirm, and nothing in the app will
+                remind you to replace it.</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn" @click="mtoSrc.open=false">Cancel</button>
+        </div>
       </div>
     </div>
   </template>
@@ -4234,6 +4305,8 @@ document.addEventListener("alpine:init", () => {
     mto: { fileName: "", project: "", dated: "", lines: [], system: "", systemGuessed: false,
            holding: "Stock", projectId: "", note: "", tag: "" },
     mtoBusy: false, mtoPosting: false, mtoSearch: "",
+    /* The per-line "where does this come from" picker. */
+    mtoSrc: { open: false, rid: null, art: "", desc: "", need: 0, current: "", options: [] },
     dn: { fileName: "", ref: "", dated: "", custRef: "", lines: [], system: "__auto", note: "", tag: "" },
     dnPendingJob: null,
     dnBusy: false, dnPosting: false, dnSavePacks: true,
@@ -4962,17 +5035,145 @@ document.addEventListener("alpine:init", () => {
     /* The article an MTO line actually draws: its substitute, if one was chosen. */
     mtoArt(line) { return line.sub || line.art; },
     mtoAfter(line) {
-      const item = this.mtoItem(this.mtoArt(line));
+      /* Against the holding THIS line draws from, which is not necessarily the
+         one chosen at the top of the page. */
+      const item = this.mtoItemFor(line);
       return (item ? this.balanceOf(item) : 0) - num(line.deduct);
     },
+    /* Is the article on the stock list at all, anywhere? Separate from whether
+       the holding it is being drawn from happens to carry it. */
+    mtoKnownAnywhere(line) {
+      const art = this.mtoArt(line);
+      return this.inventory.some((i) => key(i.article_ref) === key(art));
+    },
     get mtoActive() { return this.mto.lines.filter((l) => num(l.deduct) > 0); },
-    get mtoMissing() { return this.mto.lines.filter((l) => !this.mtoItem(this.mtoArt(l))); },
+    get mtoMissing() { return this.mto.lines.filter((l) => !this.mtoItemFor(l)); },
     get mtoNegative() { return this.mtoActive.filter((l) => this.mtoAfter(l) < 0); },
     get mtoVisible() {
       const q = key(this.mtoSearch);
       if (!q) return this.mto.lines;
       return this.mto.lines.filter((l) =>
         [l.art, l.desc, l.sec].map((v) => String(v ?? "")).join(" ").toLowerCase().includes(q));
+    },
+
+    /* ---------------- where an MTO line draws from ------------------------
+       The job's own holding first, then main stock, then a villa that has
+       finished with the material. A villa still working is treated as spoken
+       for: it is listed so you can see the material exists, but it is never
+       chosen for you and taking from it asks twice.
+    -------------------------------------------------------------------- */
+    /* free      - nobody else is waiting on it
+       leftover  - a villa that is finished with it
+       reserved  - a villa still working, i.e. booked to another job      */
+    mtoHoldingKind(holding) {
+      if (key(holding) === key(this.mto.holding)) return "own";
+      if (key(holding) === "stock") return "free";
+      const st = key(this.villaStatus(holding));
+      if (st === "complete") return "leftover";
+      if (!st) return "free";              // a holding with no job behind it
+      return "reserved";
+    },
+    mtoKindLabel(kind, holding) {
+      if (kind === "own") return "this job's own material";
+      if (kind === "free") return key(holding) === "stock" ? "main stock" : "not booked to a job";
+      if (kind === "leftover") return "left over — job complete";
+      const p = this.villaProject(holding);
+      return "booked to " + (p ? p.project_code : "another job");
+    },
+    mtoKindClass(kind) {
+      return kind === "reserved" ? "pill-bad"
+        : kind === "leftover" ? "pill-info"
+        : kind === "own" ? "pill-good" : "pill-good";
+    },
+
+    /* Every holding that physically has this article, best first. */
+    mtoSourcesFor(line) {
+      const art = this.mtoArt(line);
+      const rank = { own: 0, free: 1, leftover: 2, reserved: 3 };
+      return this.inventory
+        .filter((i) => key(i.article_ref) === key(art))
+        .map((i) => {
+          const h = this.holdingOf(i);
+          const kind = this.mtoHoldingKind(h);
+          return { holding: h, item: i, balance: this.balanceOf(i), kind,
+                   label: this.mtoKindLabel(kind, h) };
+        })
+        .sort((a, b) => (rank[a.kind] - rank[b.kind]) || (b.balance - a.balance));
+    },
+    /* What to draw from unless somebody says otherwise. Never a reserved
+       holding, and never one that cannot cover the line. */
+    mtoDefaultSource(line) {
+      const need = num(line.deduct);
+      const open = this.mtoSourcesFor(line).filter((s) => s.kind !== "reserved");
+      return (open.find((s) => s.balance >= need && need > 0)
+           || open.find((s) => s.balance > 0)
+           || open[0] || { holding: this.mto.holding }).holding;
+    },
+    /* Fill in the sources for every line, leaving any the user set by hand. */
+    mtoResolveSources(force = false) {
+      for (const l of this.mto.lines) {
+        if (!force && l.srcLocked) continue;
+        l.src = this.mtoDefaultSource(l);
+      }
+      this.mto.lines = [...this.mto.lines];
+    },
+    mtoSrcOf(line) { return line.src || this.mto.holding; },
+    mtoItemFor(line) {
+      const art = this.mtoArt(line), h = this.mtoSrcOf(line);
+      return this.inventory.find((i) =>
+        key(i.article_ref) === key(art) && key(this.holdingOf(i)) === key(h)) || null;
+    },
+    mtoSrcKind(line) { return this.mtoHoldingKind(this.mtoSrcOf(line)); },
+    /* Lines drawing on material another job is still waiting for. */
+    get mtoReserved() {
+      return this.mtoActive.filter((l) => this.mtoSrcKind(l) === "reserved");
+    },
+    /* A short line that another holding could cover. */
+    get mtoCoverable() {
+      return this.mtoActive.filter((l) => {
+        if (this.mtoAfter(l) >= 0) return false;
+        return this.mtoSourcesFor(l).some((s) =>
+          s.kind !== "reserved" && key(s.holding) !== key(this.mtoSrcOf(l)) && s.balance > 0);
+      });
+    },
+    /* How many lines come off each holding, for the confirmation. */
+    get mtoSourceSummary() {
+      const m = new Map();
+      for (const l of this.mtoActive) {
+        const h = this.mtoSrcOf(l), k = key(h);
+        if (!m.has(k)) m.set(k, { holding: h, kind: this.mtoSrcKind(l), lines: 0, units: 0 });
+        const e = m.get(k); e.lines++; e.units += num(l.deduct);
+      }
+      return [...m.values()].sort((a, b) => b.lines - a.lines);
+    },
+
+    /* ---- choosing a source by hand ---- */
+    openMtoSource(line) {
+      this.mtoSrc = {
+        open: true, rid: line.rid, art: this.mtoArt(line),
+        desc: line.sub ? (line.subDesc || line.desc) : line.desc,
+        need: num(line.deduct), current: this.mtoSrcOf(line),
+        options: this.mtoSourcesFor(line),
+      };
+    },
+    chooseMtoSource(holding, kind) {
+      if (kind === "reserved") {
+        const p = this.villaProject(holding);
+        if (!confirm(
+          "That material is booked to " + (p ? p.project_code : "another job") + ".\n\n" +
+          "Taking it for " + (this.mtoSrc.art || "this line") + " leaves that job short, and nothing " +
+          "in the app will remind you to put it back.\n\nAre you sure?")) return;
+      }
+      const l = this.mto.lines.find((x) => x.rid === this.mtoSrc.rid);
+      if (l) { l.src = holding; l.srcLocked = true; }
+      this.mto.lines = [...this.mto.lines];
+      this.mtoSrc.open = false;
+      this.toast((this.mtoSrc.art || "Line") + " will come off " + this.displayHolding(holding) + ".", "ok");
+    },
+    resetMtoSource(line) {
+      line.srcLocked = false;
+      line.src = this.mtoDefaultSource(line);
+      this.mto.lines = [...this.mto.lines];
     },
 
     async readMtoFile(event) {
@@ -5023,6 +5224,9 @@ document.addEventListener("alpine:init", () => {
         const match = this.projects.find((p) => key(p.project_code) === key(parsed.project));
         if (match) this.mto.projectId = match.id;
 
+        /* Work out where each line will come from, now the lines are loaded. */
+        this.mtoResolveSources(true);
+
         if (this.mto.tag && this.importsDone[this.mto.tag]) {
           this.toast('"' + (parsed.project || file.name) + '" was already deducted on ' +
                      String(this.importsDone[this.mto.tag]).slice(0, 10) +
@@ -5050,9 +5254,19 @@ document.addEventListener("alpine:init", () => {
                    ".\n\nPosting it again DOUBLES every quantity.\n\nPost anyway?")) return;
 
       const missing = this.mtoMissing.filter((l) => num(l.deduct) > 0);
+      /* Say plainly where the material is coming off, because a line may be
+         drawing on a holding nobody expected. */
+      const where = this.mtoSourceSummary
+        .map((s) => "• " + this.fmt(s.lines) + " line(s) off " + this.displayHolding(s.holding) +
+                    (s.kind === "reserved" ? "  — BOOKED TO ANOTHER JOB" :
+                     s.kind === "leftover" ? "  (job complete)" : ""))
+        .join("\n");
+      const taken = this.mtoReserved;
       if (!confirm("Deduct " + lines.length + " line(s) from stock for " +
-                   project.project_code + " / " + this.mto.system + "?" +
+                   project.project_code + " / " + this.mto.system + "?\n\n" + where +
                    (missing.length ? "\n\n" + missing.length + " article(s) will be created at zero and go negative." : "") +
+                   (taken.length ? "\n\n⚠ " + taken.length + " line(s) take material another job is " +
+                     "still waiting on. Nothing will remind you to put it back." : "") +
                    "\n\nThis posts to the ledger and cannot be undone from inside the app.")) return;
 
       this.mtoPosting = true;
@@ -5063,12 +5277,15 @@ document.addEventListener("alpine:init", () => {
         // Articles the MTO names that we have never stocked.
         const created = new Map();
         for (const l of missing) {
-          if (created.has(key(this.mtoArt(l)))) continue;
+          /* Keyed by article AND the holding it is being drawn from: the same
+             code taken off two holdings needs a record on each. */
+          const ck = key(this.mtoArt(l)) + "|" + key(this.mtoSrcOf(l));
+          if (created.has(ck)) continue;
           const ref = doc(collection(db, collections.inventory));
           first.set(ref, {
             article_ref: this.mtoArt(l), description: l.sub ? (l.subDesc || this.articleDesc(l.sub) || l.sub) : l.desc,
             system_ref: this.mto.system,
-            holding: this.mto.holding,
+            holding: this.mtoSrcOf(l),
             /* The MTO's unit is how the material is MEASURED (metres of profile),
                not how it is STOCKED. Profiles are stocked as bars. */
             unit: mtoStockUnit(l), location: "", min_qty: 0,
@@ -5076,7 +5293,7 @@ document.addEventListener("alpine:init", () => {
             createdAt: serverTimestamp(), createdBy: this.displayName,
             updatedAt: serverTimestamp(), updatedBy: this.displayName,
           });
-          created.set(key(this.mtoArt(l)), ref.id);
+          created.set(ck, ref.id);
         }
         if (created.size) this.track(first.commit(), "the new articles");
 
@@ -5087,8 +5304,9 @@ document.addEventListener("alpine:init", () => {
           const batch = writeBatch(db);
           for (const l of lines.slice(i, i + 200)) {
             const art = this.mtoArt(l);
-            const item = this.mtoItem(art);
-            const id = item ? item.id : created.get(key(art));
+            const src = this.mtoSrcOf(l);
+            const item = this.mtoItemFor(l);
+            const id = item ? item.id : created.get(key(art) + "|" + key(src));
             if (!id) continue;
             const qty = num(l.deduct);
             batch.update(doc(db, collections.inventory, id), {
@@ -5099,10 +5317,16 @@ document.addEventListener("alpine:init", () => {
               item_id: id, article_ref: art,
               description: (item && item.description) || (l.sub ? (l.subDesc || l.sub) : l.desc),
               system_ref: (item && item.system_ref) || this.mto.system,
-              holding: this.mto.holding,
+              holding: src,
               type: "issue", qty,
               project_id: projectId, project_code: projectCode,
-              note: note + (l.sub ? " (substitute for " + l.art + ")" : ""), at: serverTimestamp(),
+              /* When the material did not come off the holding the import was
+                 set to, say so on the entry itself — otherwise a year later
+                 nobody can tell why that villa's figure dropped. */
+              note: note + (l.sub ? " (substitute for " + l.art + ")" : "") +
+                    (key(src) === key(this.mto.holding) ? ""
+                      : " — taken from " + this.displayHolding(src)),
+              at: serverTimestamp(),
               by: this.authUser.uid, by_name: this.displayName,
             });
           }
