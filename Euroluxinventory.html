@@ -469,7 +469,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
             posted on one device appears on every other device within a second.
           </p>
         </div>
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.45, 2026年10月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.46, 2026年11月 - アイカ 🤌🏽</p>
       </div>
     </div>
   </template>
@@ -1787,7 +1787,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                       <th class="right">After</th><th>Stock list</th>
                     </tr></thead>
                     <tbody>
-                      <template x-for="l in mtoVisible" :key="l.art + l.sec">
+                      <template x-for="l in mtoVisible" :key="l.rid ?? (l.art + l.sec)">
                         <tr :class="mtoAfter(l) < 0 && 'row-bad'">
                           <td class="faint" x-text="l.sec"></td>
                           <td class="mono" style="color:var(--accent);font-weight:700">
@@ -2348,7 +2348,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
           </div>
         </div>
 
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.45, 2026年10月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.46, 2026年11月 - アイカ 🤌🏽</p>
       </div><!-- /view -->
     </main>
   </div>
@@ -4012,9 +4012,23 @@ function parseMto(aoa) {
 
     /* Project name and date sit above the first header row. */
     if (!cols) {
-      for (const t of filled) {
+      for (let i = 0; i < filled.length; i++) {
+        const t = filled[i];
+        /* Logikal puts "Project name:" in one cell and the name itself several
+           columns away, so a label hands its value to the next filled cell.
+           Without this the project came out as the word "Project name:",
+           which then became every file's import tag and made each new MTO
+           look like one already posted. */
+        const lab = low(t).replace(/[:\s]+$/, "");
+        if (lab === "project name" || lab === "project" || lab === "order name") {
+          if (filled[i + 1]) { project = filled[i + 1]; i++; }
+          continue;
+        }
+        if (lab === "date") { if (filled[i + 1]) { dated = filled[i + 1]; i++; } continue; }
         if (!dated && /^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(t)) { dated = t; continue; }
-        if (!project && t.length > 6 && low(t) !== "material analysis" && !/^\d/.test(t)) project = t;
+        /* A label is never a name. */
+        if (!project && t.length > 6 && low(t) !== "material analysis" &&
+            !/^\d/.test(t) && !/:\s*$/.test(t)) project = t;
       }
     }
 
@@ -4054,6 +4068,11 @@ function parseMto(aoa) {
       fromLength = true;
     }
     lines.push({
+      /* A stable id per row. Logikal lists the same code more than once in one
+         section when it is cut to different lengths ("PA insul. bar Sm 30" and
+         "... Special length"), so article plus section is not unique, and a
+         repeated key makes Alpine drop the whole table rather than one row. */
+      rid: lines.length,
       sec: sec || "(no section)",
       art: article,
       desc: norm(cols.desc !== undefined ? row[cols.desc] : "") || article,
