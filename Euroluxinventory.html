@@ -469,7 +469,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
             posted on one device appears on every other device within a second.
           </p>
         </div>
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.47, 2026年11月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.49, 2026年11月 - アイカ 🤌🏽</p>
       </div>
     </div>
   </template>
@@ -1130,7 +1130,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                       <th class="right">Short by</th><th>Status</th>
                     </tr></thead>
                     <tbody>
-                      <template x-for="l in wizardLines" :key="l.bom_ref">
+                      <template x-for="(l, lidx) in wizardLines" :key="lidx">
                         <tr :class="(l.short>0 || !l.known) && 'row-bad'">
                           <td class="mono" style="color:var(--accent);font-weight:700">
                             <span x-text="l.article_ref"></span>
@@ -1471,7 +1471,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                       <th class="right">On hand</th><th class="right">After</th><th>Stock line</th>
                     </tr></thead>
                     <tbody>
-                      <template x-for="l in dn.lines" :key="l.line + l.art">
+                      <template x-for="(l, lidx) in dn.lines" :key="lidx">
                         <tr>
                           <td class="faint" x-text="l.line"></td>
                           <td class="mono" style="color:var(--accent);font-weight:700" x-text="l.art"></td>
@@ -1817,7 +1817,8 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                               <button type="button" class="linkish truncate" style="max-width:130px;text-align:left"
                                       @click="openMtoSource(l)"
                                       :title="'Change where ' + mtoArt(l) + ' comes from'"
-                                      x-text="displayHolding(mtoSrcOf(l))"></button>
+                                      x-text="displayHolding(mtoSrcOf(l)) +
+                                              (mtoSrcSystem(l) ? '  ·  ' + mtoSrcSystem(l) : '')"></button>
                               <span class="pill" :class="mtoKindClass(mtoSrcKind(l))"
                                     x-show="mtoSrcKind(l) !== 'own'"
                                     x-text="mtoSrcKind(l) === 'reserved' ? 'booked' :
@@ -2259,7 +2260,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                           :style="mainStockOf(r.article_ref) > 0 ? '' : 'color:var(--bad)'"
                           x-text="fmt(mainStockOf(r.article_ref))"></td>
                       <td style="vertical-align:top">
-                        <template x-for="x in (r.subs || [])" :key="x.article_ref">
+                        <template x-for="(x, xidx) in (r.subs || [])" :key="xidx">
                           <div class="sub-line">
                             <button type="button" class="linkish mono" style="color:var(--accent);font-weight:700"
                                     @click="openWhere(x.article_ref)" x-text="x.article_ref"></button>
@@ -2366,7 +2367,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
           </div>
         </div>
 
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.47, 2026年11月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.49, 2026年11月 - アイカ 🤌🏽</p>
       </div><!-- /view -->
     </main>
   </div>
@@ -2882,7 +2883,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
               <span>Works both ways &mdash; also record this article as a substitute for each of the above</span>
             </label>
             <datalist id="sub-articles">
-              <template x-for="a in articleList" :key="a.article_ref">
+              <template x-for="(a, aidx) in articleList" :key="aidx">
                 <option :value="a.article_ref" x-text="a.description"></option>
               </template>
             </datalist>
@@ -2918,10 +2919,15 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
               MTO creates it and lets it go negative, or use Substitute to put something else in.</p>
           </template>
 
-          <template x-for="o in mtoSrc.options" :key="o.holding">
+          <!-- Keyed on the stock line, not the holding: one article can sit in
+               the same holding under two systems, and a repeated key makes
+               Alpine drop every row while leaving the rest of the dialog up. -->
+          <template x-for="o in mtoSrc.options" :key="o.id">
             <div class="pick-row">
               <div class="grow">
                 <span style="font-weight:600" x-text="displayHolding(o.holding)"></span>
+                <span class="faint" style="font-size:.78rem" x-show="o.system"
+                      x-text="'  \u00b7  ' + o.system"></span>
                 <div class="faint" style="font-size:.75rem" x-text="o.label"></div>
               </div>
               <!-- Enough, some, or none: the colour says it before the number does. -->
@@ -2930,9 +2936,9 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                     x-text="fmt(o.balance) + ' on hand'"></span>
               <span class="pill pill-bad" x-show="o.kind === 'reserved'">booked</span>
               <button class="btn btn-sm" :class="o.kind === 'reserved' ? '' : 'btn-primary'"
-                      x-show="key(o.holding) !== key(mtoSrc.current)"
-                      @click="chooseMtoSource(o.holding, o.kind)">Use this</button>
-              <span class="pill pill-info" x-show="key(o.holding) === key(mtoSrc.current)">in use</span>
+                      x-show="o.id !== mtoSrc.currentId"
+                      @click="chooseMtoSource(o)">Use this</button>
+              <span class="pill pill-info" x-show="o.id === mtoSrc.currentId">in use</span>
             </div>
           </template>
 
@@ -2971,7 +2977,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
             <template x-if="pick.open && !pickRecorded.length">
               <p class="hint" style="margin:0">None recorded for this article yet. Search the stock list below.</p>
             </template>
-            <template x-for="c in pickRecorded" :key="c.article_ref">
+            <template x-for="(c, cidx) in pickRecorded" :key="cidx">
               <div class="pick-row">
                 <div class="grow">
                   <span class="mono" style="color:var(--accent);font-weight:700" x-text="c.article_ref"></span>
@@ -2988,7 +2994,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
           <div>
             <h4 class="label" style="margin-bottom:.4rem">Or choose any article</h4>
             <input class="input" x-model.trim="pick.search" placeholder="Search by code or description" aria-label="Search the stock list">
-            <template x-for="c in pickSearchResults" :key="c.article_ref">
+            <template x-for="(c, cidx) in pickSearchResults" :key="cidx">
               <div class="pick-row">
                 <div class="grow">
                   <span class="mono" style="color:var(--accent);font-weight:700" x-text="c.article_ref"></span>
@@ -3803,6 +3809,29 @@ const stockKey = (article, system, holding) =>
    the set was rebuilt once per ledger entry — 1,271 x 7,447 operations for a
    single read of currentMovements, which is what made the app hang. */
 let _liveIds = { src: null, set: new Set() };
+
+/* An index of the stock list, so a lookup is a map hit rather than a scan of
+   every line. The MTO page asks "which line does this row draw on?" four
+   times per row, and at 1,330 lines x 95 rows a scan each time is half a
+   million reads for one render. Rebuilt only when the snapshot listener
+   hands over a new array, exactly like _liveIds above. */
+let _invIdx = { src: null, byId: new Map(), byArtHold: new Map(), byArt: new Map() };
+const invIndex = (inventory) => {
+  if (_invIdx.src !== inventory) {
+    const byId = new Map(), byArtHold = new Map(), byArt = new Map();
+    for (const i of inventory) {
+      byId.set(i.id, i);
+      const a = key(i.article_ref);
+      const ah = a + "|" + key(i.holding || "Stock");
+      if (!byArtHold.has(ah)) byArtHold.set(ah, i);
+      let list = byArt.get(a);
+      if (!list) { list = []; byArt.set(a, list); }
+      list.push(i);
+    }
+    _invIdx = { src: inventory, byId, byArtHold, byArt };
+  }
+  return _invIdx;
+};
 const liveIdsFor = (inventory) => {
   if (_liveIds.src !== inventory) {
     const s = new Set();
@@ -5028,9 +5057,8 @@ document.addEventListener("alpine:init", () => {
     },
     /* Resolve an MTO line against the holding it is being drawn from. */
     mtoItem(article) {
-      return this.inventory.find((i) =>
-        key(i.article_ref) === key(article) &&
-        key(this.holdingOf(i)) === key(this.mto.holding)) || null;
+      return invIndex(this.inventory)
+        .byArtHold.get(key(article) + "|" + key(this.mto.holding || "Stock")) || null;
     },
     /* The article an MTO line actually draws: its substitute, if one was chosen. */
     mtoArt(line) { return line.sub || line.art; },
@@ -5043,8 +5071,7 @@ document.addEventListener("alpine:init", () => {
     /* Is the article on the stock list at all, anywhere? Separate from whether
        the holding it is being drawn from happens to carry it. */
     mtoKnownAnywhere(line) {
-      const art = this.mtoArt(line);
-      return this.inventory.some((i) => key(i.article_ref) === key(art));
+      return !!invIndex(this.inventory).byArt.get(key(this.mtoArt(line)));
     },
     get mtoActive() { return this.mto.lines.filter((l) => num(l.deduct) > 0); },
     get mtoMissing() { return this.mto.lines.filter((l) => !this.mtoItemFor(l)); },
@@ -5087,41 +5114,65 @@ document.addEventListener("alpine:init", () => {
     },
 
     /* Every holding that physically has this article, best first. */
+    /* A source is a STOCK LINE, not a holding. One article can sit in the
+       same holding under two systems — 244182 is in main stock under both
+       ADS / AWS 65 and ASE 55 — so naming only the holding would be
+       ambiguous about which line the material actually comes off. */
     mtoSourcesFor(line) {
       const art = this.mtoArt(line);
       const rank = { own: 0, free: 1, leftover: 2, reserved: 3 };
-      return this.inventory
-        .filter((i) => key(i.article_ref) === key(art))
+      const wanted = squash(this.mto.system);
+      return (invIndex(this.inventory).byArt.get(key(art)) || [])
         .map((i) => {
           const h = this.holdingOf(i);
           const kind = this.mtoHoldingKind(h);
-          return { holding: h, item: i, balance: this.balanceOf(i), kind,
+          return { id: i.id, holding: h, system: i.system_ref || "", item: i,
+                   balance: this.balanceOf(i), kind,
+                   sameSystem: !!wanted && squash(i.system_ref) === wanted,
                    label: this.mtoKindLabel(kind, h) };
         })
-        .sort((a, b) => (rank[a.kind] - rank[b.kind]) || (b.balance - a.balance));
+        .sort((a, b) => (rank[a.kind] - rank[b.kind])
+                     || ((b.sameSystem ? 1 : 0) - (a.sameSystem ? 1 : 0))
+                     || (b.balance - a.balance));
     },
-    /* What to draw from unless somebody says otherwise. Never a reserved
-       holding, and never one that cannot cover the line. */
+    /* What to draw from unless somebody says otherwise. Never material booked
+       to a live job, and prefer a line that can actually cover the quantity. */
     mtoDefaultSource(line) {
       const need = num(line.deduct);
       const open = this.mtoSourcesFor(line).filter((s) => s.kind !== "reserved");
-      return (open.find((s) => s.balance >= need && need > 0)
-           || open.find((s) => s.balance > 0)
-           || open[0] || { holding: this.mto.holding }).holding;
+      return open.find((s) => s.balance >= need && need > 0)
+          || open.find((s) => s.balance > 0)
+          || open[0] || null;
     },
     /* Fill in the sources for every line, leaving any the user set by hand. */
     mtoResolveSources(force = false) {
       for (const l of this.mto.lines) {
         if (!force && l.srcLocked) continue;
-        l.src = this.mtoDefaultSource(l);
+        const pick = this.mtoDefaultSource(l);
+        l.srcId = pick ? pick.id : "";
+        l.src = pick ? pick.holding : this.mto.holding;
       }
       this.mto.lines = [...this.mto.lines];
     },
-    mtoSrcOf(line) { return line.src || this.mto.holding; },
+    /* The stock line this row draws on, by id where one was chosen. */
     mtoItemFor(line) {
-      const art = this.mtoArt(line), h = this.mtoSrcOf(line);
-      return this.inventory.find((i) =>
-        key(i.article_ref) === key(art) && key(this.holdingOf(i)) === key(h)) || null;
+      const idx = invIndex(this.inventory);
+      if (line.srcId) {
+        const hit = idx.byId.get(line.srcId);
+        if (hit) return hit;
+      }
+      const art = this.mtoArt(line), h = line.src || this.mto.holding;
+      return idx.byArtHold.get(key(art) + "|" + key(h || "Stock")) || null;
+    },
+    mtoSrcOf(line) {
+      const it = this.mtoItemFor(line);
+      return it ? this.holdingOf(it) : (line.src || this.mto.holding);
+    },
+    /* The system of the line it draws on, shown where a holding alone would
+       not say which of two lines is meant. */
+    mtoSrcSystem(line) {
+      const it = this.mtoItemFor(line);
+      return (it && it.system_ref) || "";
     },
     mtoSrcKind(line) { return this.mtoHoldingKind(this.mtoSrcOf(line)); },
     /* Lines drawing on material another job is still waiting for. */
@@ -5152,27 +5203,31 @@ document.addEventListener("alpine:init", () => {
       this.mtoSrc = {
         open: true, rid: line.rid, art: this.mtoArt(line),
         desc: line.sub ? (line.subDesc || line.desc) : line.desc,
-        need: num(line.deduct), current: this.mtoSrcOf(line),
+        need: num(line.deduct), currentId: (this.mtoItemFor(line) || {}).id || "",
         options: this.mtoSourcesFor(line),
       };
     },
-    chooseMtoSource(holding, kind) {
-      if (kind === "reserved") {
-        const p = this.villaProject(holding);
+    chooseMtoSource(opt) {
+      if (!opt) return;
+      if (opt.kind === "reserved") {
+        const p = this.villaProject(opt.holding);
         if (!confirm(
           "That material is booked to " + (p ? p.project_code : "another job") + ".\n\n" +
           "Taking it for " + (this.mtoSrc.art || "this line") + " leaves that job short, and nothing " +
           "in the app will remind you to put it back.\n\nAre you sure?")) return;
       }
       const l = this.mto.lines.find((x) => x.rid === this.mtoSrc.rid);
-      if (l) { l.src = holding; l.srcLocked = true; }
+      if (l) { l.srcId = opt.id; l.src = opt.holding; l.srcLocked = true; }
       this.mto.lines = [...this.mto.lines];
       this.mtoSrc.open = false;
-      this.toast((this.mtoSrc.art || "Line") + " will come off " + this.displayHolding(holding) + ".", "ok");
+      this.toast((this.mtoSrc.art || "Line") + " will come off " +
+        this.displayHolding(opt.holding) + (opt.system ? " / " + opt.system : "") + ".", "ok");
     },
     resetMtoSource(line) {
       line.srcLocked = false;
-      line.src = this.mtoDefaultSource(line);
+      const pick = this.mtoDefaultSource(line);
+      line.srcId = pick ? pick.id : "";
+      line.src = pick ? pick.holding : this.mto.holding;
       this.mto.lines = [...this.mto.lines];
     },
 
