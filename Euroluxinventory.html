@@ -469,7 +469,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
             posted on one device appears on every other device within a second.
           </p>
         </div>
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.49, 2026年11月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.51, 2026年11月 - アイカ 🤌🏽</p>
       </div>
     </div>
   </template>
@@ -1707,6 +1707,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                         </template>
                       </select>
                       <span class="hint" x-show="!mto.projectId">Pick the job, or create it below.</span>
+                      <span class="hint" style="color:#fcd34d" x-show="mto.projectId && mto.jobGuessed">Matched on the villa number in the file &mdash; check it is the right job.</span>
                     </div>
                     <div class="field">
                       <label class="label">Draw from *</label>
@@ -1721,17 +1722,34 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                         falls back to main stock, then to a villa that has finished with it.</span>
                     </div>
                   </div>
-                  <div class="grid-2">
-                    <div class="field">
-                      <label class="label">System *</label>
-                      <select id="mto-system" class="select" x-model="mto.system">
-                        <option value="">&mdash; Choose a system &mdash;</option>
-                        <template x-for="sy in systemOptions" :key="sy">
-                          <option :value="sy" x-text="sy"></option>
-                        </template>
-                      </select>
-                      <span class="hint" x-show="mto.systemGuessed">Guessed from the file name &mdash; change it if wrong.</span>
+                  <div class="field">
+                    <label class="label">Systems this MTO covers</label>
+                    <div class="row" style="gap:.4rem;flex-wrap:wrap;margin-bottom:.45rem"
+                         x-show="mto.systems.length">
+                      <template x-for="(sy, syi) in mto.systems" :key="syi">
+                        <button type="button" class="pill pill-info"
+                                style="cursor:pointer;display:inline-flex;gap:.35rem;align-items:center"
+                                @click="mtoToggleSystem(sy)"
+                                :title="`Remove ${sy} from this MTO`">
+                          <span x-text="sy"></span>
+                          <span style="opacity:.75" x-show="mtoLinesUnder(sy)"
+                                x-text="fmt(mtoLinesUnder(sy))"></span>
+                          <span style="opacity:.6">&times;</span>
+                        </button>
+                      </template>
                     </div>
+                    <select id="mto-system" class="select"
+                            @change="if ($event.target.value) { mtoToggleSystem($event.target.value); $event.target.value=''; }">
+                      <option value="">&mdash; Add another system &mdash;</option>
+                      <template x-for="sy in systemOptions.filter(x => !mtoHasSystem(x))" :key="sy">
+                        <option :value="sy" x-text="sy"></option>
+                      </template>
+                    </select>
+                    <span class="hint" x-show="mto.systemsDetected.length"
+                          x-text="`Worked out from where each line draws from \u2014 the file itself does not state a system. The number is how many lines that system accounts for; click a system to take it off.`"></span>
+                    <span class="hint" style="color:#fcd34d" x-show="!mto.systems.length && mto.lines.length">
+                      None of these articles matched a system in your stock list.
+                    </span>
                   </div>
                   <div class="field">
                     <label class="label">Note (optional)</label>
@@ -1761,12 +1779,35 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
 
               <template x-if="mtoMissing.length">
                 <div class="banner banner-warn">
-                  <div>
+                  <div style="width:100%">
                     <strong x-text="`${fmt(mtoMissing.length)} article(s) are not in your stock list.`"></strong>
                     They will be created at zero and go straight to negative, so the job's real
-                    consumption is recorded:
-                    <span class="mono" style="font-size:.78rem"
-                          x-text="mtoMissing.slice(0,8).map(l => l.art).join(', ') + (mtoMissing.length > 8 ? '…' : '')"></span>
+                    consumption is recorded. Give each one a system &mdash; an MTO spans several,
+                    so there is no one answer for the whole file. They are marked for checking
+                    afterwards either way.
+                    <div style="margin-top:.7rem;display:grid;gap:.4rem">
+                      <template x-for="(l, mi) in mtoMissing" :key="mi">
+                        <div class="row" style="gap:.6rem;align-items:center;flex-wrap:wrap">
+                          <span class="mono" style="min-width:5.5rem;color:var(--accent);font-weight:700"
+                                x-text="l.art"></span>
+                          <span class="faint" style="flex:1;min-width:9rem;font-size:.8rem"
+                                x-text="l.desc || ''"></span>
+                          <select class="select" style="max-width:16rem" x-model="l.newSys">
+                            <option value="">&mdash; system? &mdash;</option>
+                            <template x-for="sy in mtoNewSysOptions" :key="sy">
+                              <option :value="sy" x-text="sy + (mtoHasSystem(sy) ? '' : '  (not in this MTO)')"></option>
+                            </template>
+                          </select>
+                        </div>
+                      </template>
+                    </div>
+                    <div class="row" style="margin-top:.6rem;gap:.5rem;align-items:center">
+                      <button class="btn btn-sm" type="button" x-show="mto.systems.length === 1"
+                              @click="mtoMissing.forEach(l => l.newSys = mto.systems[0]); mto.lines = [...mto.lines]"
+                              x-text="`Set them all to ${mto.systems[0]}`"></button>
+                      <span class="faint" style="font-size:.78rem" x-show="mtoNewUnlabelled.length"
+                            x-text="`${fmt(mtoNewUnlabelled.length)} still without a system.`"></span>
+                    </div>
                   </div>
                 </div>
               </template>
@@ -1841,11 +1882,15 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                   </table>
                 </div>
                 <div class="card-pad" style="border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
-                  <span class="faint" style="font-size:.82rem"
+                  <span class="faint" style="font-size:.82rem" x-show="!mtoBlockers.length"
                         x-text="`${fmt(mtoActive.length)} line(s) will post` +
                                 (mtoVisible.length !== mto.lines.length ? ` · showing ${fmt(mtoVisible.length)} of ${fmt(mto.lines.length)}` : '')"></span>
+                  <span class="hint" style="color:#fcd34d;font-size:.82rem"
+                        x-show="mtoBlockers.length"
+                        x-text="`Nothing can post yet — ${mtoBlockers.join(', and ')}.`"></span>
                   <button class="btn btn-primary" @click="postMto()"
-                          :disabled="mtoPosting || !mtoActive.length || !mto.system || !mto.projectId">
+                          :title="mtoBlockers.length ? `Nothing can post yet — ${mtoBlockers.join(', and ')}.` : 'Post these lines'"
+                          :disabled="mtoPosting || !!mtoBlockers.length">
                     <span x-show="mtoPosting" class="spinner"></span><span>Deduct from stock</span>
                   </button>
                 </div>
@@ -1875,6 +1920,9 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                 <button :class="report==='low' && 'on'" @click="report='low'">Below minimum</button>
                 <button :class="report==='negative' && 'on'" @click="report='negative'">Negative</button>
                 <button :class="report==='onorder' && 'on'" @click="report='onorder'">On order</button>
+                <button :class="report==='syscheck' && 'on'" @click="report='syscheck'"
+                        x-show="systemCheckItems.length"
+                        x-text="`System to confirm (${fmt(systemCheckItems.length)})`"></button>
               </div>
               <button class="btn btn-sm" @click="exportReport()"
                       :disabled="!inventory.length">Export CSV</button>
@@ -1978,7 +2026,16 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
                               <td class="right num" :style="onOrder(i) ? 'color:var(--warn)' : ''"
                                   x-text="onOrder(i) ? fmt(onOrder(i)) : '—'"></td>
                               <td class="right num muted" x-text="fmt(reorderLevel(i))"></td>
-                              <td><span class="pill" :class="statusClass(i)" x-text="statusLabel(i)"></span></td>
+                              <td>
+                                <div class="row" style="gap:.35rem;flex-wrap:nowrap;align-items:center">
+                                  <span class="pill" :class="statusClass(i)" x-text="statusLabel(i)"></span>
+                                  <button type="button" class="pill pill-warn" style="cursor:pointer"
+                                          x-show="i.needs_system_check" @click="openItem(i)"
+                                          title="Created by an MTO import \u2014 confirm its system">
+                                    system?
+                                  </button>
+                                </div>
+                              </td>
                             </tr>
                           </template>
                         </tbody>
@@ -1991,13 +2048,16 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
           </template>
 
           <!-- ---- below minimum ---- -->
-          <template x-if="report==='low' || report==='negative'">
+          <template x-if="report==='low' || report==='negative' || report==='syscheck'">
             <div class="stack">
               <div class="card">
                 <div class="card-pad" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
                   <div>
                     <h3 style="font-size:.95rem"
-                        x-text="report==='negative' ? 'Negative balances' : 'Replenishment report'"></h3>
+                        x-text="report==='syscheck' ? 'Articles whose system needs confirming'
+                                : (report==='negative' ? 'Negative balances' : 'Replenishment report')"></h3>
+                    <p class="view-sub" x-show="report==='syscheck'"
+                       x-text="`${fmt(systemCheckItems.length)} article(s) were created by an MTO import, which spans several systems \u2014 the system given to each was a choice made during the import. Confirm or correct it, then the flag clears.`"></p>
                     <p class="view-sub" x-show="report==='low'"
                        x-text="`${fmt(shortageCount)} of ${fmt(holdingInventory.length)} articles in ${holdingLabel} are at or below their minimum. Default minimum is ${fmt(settings.shortageThreshold)} where no article minimum is set.`"></p>
                     <p class="view-sub" x-show="report==='negative'"
@@ -2367,7 +2427,7 @@ button.pill{cursor:pointer;font:inherit;font-size:.72rem}
           </div>
         </div>
 
-        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.49, 2026年11月 - アイカ 🤌🏽</p>
+        <p class="app-footnote">Eurolux Inventory Management System, Created with love by Uncle Ed, Version 4.51, 2026年11月 - アイカ 🤌🏽</p>
       </div><!-- /view -->
     </main>
   </div>
@@ -4331,7 +4391,7 @@ document.addEventListener("alpine:init", () => {
     report: "stock", openGroups: {},
     selectedHolding: "Stock",
     openProjects: {},
-    mto: { fileName: "", project: "", dated: "", lines: [], system: "", systemGuessed: false,
+    mto: { fileName: "", project: "", dated: "", lines: [], systems: [], systemsDetected: [], jobGuessed: false,
            holding: "Stock", projectId: "", note: "", tag: "" },
     mtoBusy: false, mtoPosting: false, mtoSearch: "",
     /* The per-line "where does this come from" picker. */
@@ -4683,7 +4743,14 @@ document.addEventListener("alpine:init", () => {
         .sort((a, b) => this.onOrder(b) - this.onOrder(a));
     },
     get reportRows() {
+      if (this.report === "syscheck") return this.systemCheckItems;
       return this.report === "negative" ? this.negativeItems : this.shortageItems;
+    },
+    /* Articles an MTO created on the fly. Their system was a choice made in a
+       hurry during an import, so they stay flagged until somebody confirms it. */
+    get systemCheckItems() {
+      return this.inventory.filter((i) => i.needs_system_check)
+        .sort((a, b) => String(a.article_ref).localeCompare(String(b.article_ref)));
     },
     get allGroupsOpen() {
       return this.systemSummary.length > 0 &&
@@ -5051,7 +5118,7 @@ document.addEventListener("alpine:init", () => {
 
     /* ---- MTO import ------------------------------------------------------ */
     clearMto() {
-      this.mto = { fileName: "", project: "", dated: "", lines: [], system: "", systemGuessed: false,
+      this.mto = { fileName: "", project: "", dated: "", lines: [], systems: [], systemsDetected: [], jobGuessed: false,
                    holding: "Stock", projectId: "", note: "", tag: "" };
       this.mtoSearch = "";
     },
@@ -5074,7 +5141,54 @@ document.addEventListener("alpine:init", () => {
       return !!invIndex(this.inventory).byArt.get(key(this.mtoArt(line)));
     },
     get mtoActive() { return this.mto.lines.filter((l) => num(l.deduct) > 0); },
+    /* Everything standing between the operator and a posting, in plain words.
+       The button is disabled whenever this is non-empty, and says why, because
+       a dead button with no reason just reads as broken. */
+    get mtoBlockers() {
+      const out = [];
+      if (!this.mto.lines.length) out.push("load an MTO file");
+      else if (!this.mtoActive.length) out.push("set a quantity on at least one line");
+      if (!this.mto.projectId) out.push("choose the job to book it to");
+      if (this.mtoNewUnlabelled.length)
+        out.push("give the " + this.mtoNewUnlabelled.length + " new article(s) a system");
+      return out;
+    },
     get mtoMissing() { return this.mto.lines.filter((l) => !this.mtoItemFor(l)); },
+    /* Articles the MTO names that are not in stock yet. Each needs a system of
+       its own: they can belong to any of the systems the MTO covers, and a
+       blanket label would be wrong for most of them. */
+    get mtoNewUnlabelled() {
+      return this.mtoMissing.filter((l) => num(l.deduct) > 0 && !l.newSys);
+    },
+    mtoHasSystem(sy) { return this.mto.systems.some((x) => key(x) === key(sy)); },
+    mtoToggleSystem(sy) {
+      if (this.mtoHasSystem(sy)) this.mto.systems = this.mto.systems.filter((x) => key(x) !== key(sy));
+      else this.mto.systems = [...this.mto.systems, sy];
+      this.mtoResolveSources();
+    },
+    mtoWasDetected(sy) { return this.mto.systemsDetected.some((x) => key(x) === key(sy)); },
+    mtoLinesUnder(sy) {
+      const hit = this.mtoSystemBreakdown.find((b) => key(b.system) === key(sy));
+      return hit ? hit.lines : 0;
+    },
+    /* The systems to offer for a new article: the ones this MTO covers first,
+       then everything else, so the common choice is at the top. */
+    get mtoNewSysOptions() {
+      const mine = this.mto.systems;
+      const rest = this.systemOptions.filter((sy) => !this.mtoHasSystem(sy));
+      return [...mine, ...rest];
+    },
+    /* What the posting will actually label things, counted from the stock items
+       themselves rather than from any one dropdown. */
+    get mtoSystemBreakdown() {
+      const t = new Map();
+      for (const l of this.mtoActive) {
+        const item = this.mtoItemFor(l);
+        const sy = (item && item.system_ref) || l.newSys || "(no system)";
+        t.set(sy, (t.get(sy) || 0) + 1);
+      }
+      return [...t.entries()].sort((a, b) => b[1] - a[1]).map(([system, lines]) => ({ system, lines }));
+    },
     get mtoNegative() { return this.mtoActive.filter((l) => this.mtoAfter(l) < 0); },
     get mtoVisible() {
       const q = key(this.mtoSearch);
@@ -5121,14 +5235,14 @@ document.addEventListener("alpine:init", () => {
     mtoSourcesFor(line) {
       const art = this.mtoArt(line);
       const rank = { own: 0, free: 1, leftover: 2, reserved: 3 };
-      const wanted = squash(this.mto.system);
+      const wanted = this.mto.systems.map(squash).filter(Boolean);
       return (invIndex(this.inventory).byArt.get(key(art)) || [])
         .map((i) => {
           const h = this.holdingOf(i);
           const kind = this.mtoHoldingKind(h);
           return { id: i.id, holding: h, system: i.system_ref || "", item: i,
                    balance: this.balanceOf(i), kind,
-                   sameSystem: !!wanted && squash(i.system_ref) === wanted,
+                   sameSystem: wanted.length > 0 && wanted.includes(squash(i.system_ref)),
                    label: this.mtoKindLabel(kind, h) };
         })
         .sort((a, b) => (rank[a.kind] - rank[b.kind])
@@ -5257,30 +5371,78 @@ document.addEventListener("alpine:init", () => {
            "MTO_Material_analysis_for_ASE_36_PD_-_Villa_80". Punctuation varies
            wildly between exports, so compare letters and digits only, and take
            the longest match so "ASE 36 (BALANCE)" wins over "ASE 36". */
+        /* An MTO covers a villa, and a villa may use several systems — Villa C19
+           touches five. So do not pick one: collect every system the articles
+           actually belong to, in order of how many lines each accounts for, and
+           let the operator tick the set. The file itself never states a system;
+           its sections are material categories (Profiles, Hardware, Gaskets). */
         const squash = (v) => String(v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
-        const fname = squash(file.name);
-        let system = "", guessed = false;
-        for (const sy of this.systemOptions) {
-          const t = squash(sy);
-          if (t && fname.includes(t) && t.length > squash(system).length) {
-            system = sy; guessed = true;
-          }
-        }
 
         this.mto = {
           fileName: file.name, project: parsed.project, dated: parsed.dated,
-          lines: parsed.lines, system, systemGuessed: guessed,
+          lines: parsed.lines, systems: [], systemsDetected: [], jobGuessed: false,
           holding: "Stock", projectId: "", note: "",
           tag: "MTO:" + (parsed.project || file.name),
         };
 
-        // Select the matching job if you already have one; otherwise leave it
-        // empty so the banner asks you to create it.
-        const match = this.projects.find((p) => key(p.project_code) === key(parsed.project));
-        if (match) this.mto.projectId = match.id;
+        /* Select the matching job if you already have one; otherwise leave it
+           empty so the banner asks you to create it.
+
+           An exact match almost never happens: Logikal writes the full address
+           ("Villa 14, Street 1, Mirador La Coleccion") while the job carries a
+           works number ("1398 - VILLA 14"). So fall back to the villa number,
+           and only when exactly one job claims it — booking 95 lines to the
+           wrong villa is far worse than making the operator pick. */
+        /* The works number ("1428 - Villa C19, ...") when the export carries it,
+           then the villa's own identifier, which may be lettered: Villa 14,
+           Villa C19, Villa D58. Only the project name is searched, never the
+           file name, whose dates are full of numbers that would collide. */
+        const worksNo = (v) => {
+          const m = String(v ?? "").match(/^\s*(\d{3,5})\b/);
+          return m ? m[1] : "";
+        };
+        const villaId = (v) => {
+          const m = String(v ?? "").match(/villa\s*#?\s*([a-z]?)\s*0*(\d+)/i);
+          return m ? (m[1] || "").toUpperCase() + m[2] : "";
+        };
+        let match = this.projects.find((p) => key(p.project_code) === key(parsed.project));
+        let jobGuessed = false;
+        if (!match && parsed.project) {
+          for (const id of [worksNo, villaId]) {
+            const want = id === worksNo
+              ? (String(parsed.project).match(/(?:^|[^0-9])(\d{3,5})(?:[^0-9]|$)/) || [])[1] || ""
+              : villaId(parsed.project);
+            if (!want) continue;
+            const hits = this.projects.filter(
+              (p) => id(p.project_code) === want || id(p.holding) === want);
+            if (hits.length === 1) { match = hits[0]; jobGuessed = true; break; }
+          }
+        }
+        if (match) { this.mto.projectId = match.id; this.mto.jobGuessed = jobGuessed; }
 
         /* Work out where each line will come from, now the lines are loaded. */
         this.mtoResolveSources(true);
+
+        /* Only now can the systems be read off, because a system belongs to the
+           stock row a line resolves to, not to the article code. Counting every
+           system an article appears under anywhere named 13 of the 21 systems,
+           since gaskets and fixings are shared across most of them. */
+        const detected = this.mtoSystemBreakdown.map((b) => b.system).filter((x) => x && x !== "(no system)");
+        const fname = squash(file.name);
+        for (const sy of this.systemOptions) {
+          const t = squash(sy);
+          if (t && fname.includes(t) && !detected.some((d) => key(d) === key(sy))) detected.unshift(sy);
+        }
+        this.mto.systems = [...detected];
+        this.mto.systemsDetected = [...detected];
+
+        /* When the whole MTO sits under one system there is nothing to decide,
+           so fill the new articles in and let the operator override. With more
+           than one, leave them blank: a blanket answer would be wrong for most. */
+        if (detected.length === 1) {
+          for (const l of this.mto.lines) if (!this.mtoItemFor(l)) l.newSys = detected[0];
+          this.mto.lines = [...this.mto.lines];
+        }
 
         if (this.mto.tag && this.importsDone[this.mto.tag]) {
           this.toast('"' + (parsed.project || file.name) + '" was already deducted on ' +
@@ -5296,7 +5458,7 @@ document.addEventListener("alpine:init", () => {
     async postMto() {
       if (this.mtoPosting) return;
       const lines = this.mtoActive;
-      if (!lines.length || !this.mto.system) return;
+      if (!lines.length || this.mtoBlockers.length) return;
 
       const project = this.projects.find((p) => p.id === this.mto.projectId) || null;
       if (!project) {
@@ -5318,7 +5480,10 @@ document.addEventListener("alpine:init", () => {
         .join("\n");
       const taken = this.mtoReserved;
       if (!confirm("Deduct " + lines.length + " line(s) from stock for " +
-                   project.project_code + " / " + this.mto.system + "?\n\n" + where +
+                   project.project_code + "?\n\n" +
+                   "Systems:\n" + this.mtoSystemBreakdown
+                     .map((b) => "\u2022 " + this.fmt(b.lines) + " line(s) \u2014 " + b.system).join("\n") +
+                   "\n\n" + where +
                    (missing.length ? "\n\n" + missing.length + " article(s) will be created at zero and go negative." : "") +
                    (taken.length ? "\n\n⚠ " + taken.length + " line(s) take material another job is " +
                      "still waiting on. Nothing will remind you to put it back." : "") +
@@ -5339,7 +5504,10 @@ document.addEventListener("alpine:init", () => {
           const ref = doc(collection(db, collections.inventory));
           first.set(ref, {
             article_ref: this.mtoArt(l), description: l.sub ? (l.subDesc || this.articleDesc(l.sub) || l.sub) : l.desc,
-            system_ref: this.mto.system,
+            /* Chosen for this article, not for the import: an MTO spans systems.
+               Flagged so it stands out in Master Stock until somebody confirms it. */
+            system_ref: l.newSys || "",
+            needs_system_check: true,
             holding: this.mtoSrcOf(l),
             /* The MTO's unit is how the material is MEASURED (metres of profile),
                not how it is STOCKED. Profiles are stocked as bars. */
@@ -5371,7 +5539,7 @@ document.addEventListener("alpine:init", () => {
             batch.set(doc(collection(db, collections.movements)), {
               item_id: id, article_ref: art,
               description: (item && item.description) || (l.sub ? (l.subDesc || l.sub) : l.desc),
-              system_ref: (item && item.system_ref) || this.mto.system,
+              system_ref: (item && item.system_ref) || l.newSys || "",
               holding: src,
               type: "issue", qty,
               project_id: projectId, project_code: projectCode,
@@ -6119,6 +6287,9 @@ document.addEventListener("alpine:init", () => {
           pack_unit: f.pack_unit || "PKT",
           bar_length: barMm(f.bar_length),
           on_order: Math.max(0, num(f.on_order)),
+          /* Saving the article is the confirmation: whatever system it now
+             carries was looked at by a person, so the import flag comes off. */
+          needs_system_check: false,
           updatedAt: serverTimestamp(),
           updatedBy: this.displayName,
         };
